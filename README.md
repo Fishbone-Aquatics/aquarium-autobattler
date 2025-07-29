@@ -1,96 +1,164 @@
-# 
+# 🐠 Aquarium Autobattler - Modern Full-Stack Rebuild
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+A modern, scalable rebuild of the Aquarium Autobattler game using Next.js, NestJS, and WebSockets.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## 🏗️ Architecture
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+This project follows a microservices architecture with an Nx monorepo:
 
-## Run tasks
-
-To run tasks with Nx use:
-
-```sh
-npx nx <target> <project-name>
+```
+/workspace
+├─ apps/
+│   ├─ frontend/             # Next.js + React + Tailwind
+│   └─ game-engine/          # NestJS microservice for game logic
+├─ libs/
+│   └─ shared-types/         # Shared TypeScript interfaces
+└─ tools/                    # Nx configurations
 ```
 
-For example:
+## 🚀 Getting Started
 
-```sh
-npx nx build myproject
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Installation
+
+1. Install dependencies:
+```bash
+npm install
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+2. Start the development servers:
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```bash
+# Start the game engine (backend)
+npx nx serve game-engine
 
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
+# Start the frontend (in another terminal)
+npx nx serve frontend
 ```
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+The frontend will be available at `http://localhost:3000` and the game engine at `http://localhost:3001`.
 
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
+## 🎮 Game Features
 
-# Generate a library
-npx nx g @nx/react:lib some-lib
+### Current Implementation
+- ✅ Shop system with gold economy
+- ✅ 8×6 grid-based tank placement
+- ✅ Real-time WebSocket communication
+- ✅ Piece types: Fish, Plants, Equipment, Consumables
+- ✅ Round-based gameplay (15 rounds)
+- ✅ Water quality mechanics
+- ✅ Interest system (1g per 10g held, max 5g)
+- ✅ Loss streak tracking
+
+### Planned Features
+- [ ] Battle animation system
+- [ ] AI opponent strategies
+- [ ] Piece synergies and abilities
+- [ ] Campaign progression
+- [ ] Player authentication
+- [ ] Leaderboards
+
+## 🔧 Development
+
+### Available Commands
+
+```bash
+# Development
+npx nx serve frontend          # Start frontend dev server
+npx nx serve game-engine      # Start backend dev server
+
+# Building
+npx nx build frontend       # Build frontend for production
+npx nx build game-engine   # Build backend for production
+
+# Testing
+npx nx test frontend        # Run frontend tests
+npx nx test game-engine    # Run backend tests
+npx nx test shared-types   # Run shared types tests
+
+# Linting
+npx nx lint frontend        # Lint frontend code
+npx nx lint game-engine    # Lint backend code
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+### Project Structure
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+#### Frontend (`apps/frontend/`)
+- **Next.js 14** with App Router
+- **React 18** with TypeScript
+- **Tailwind CSS** for styling
+- **Socket.IO Client** for real-time communication
 
-## Set up CI!
+#### Game Engine (`apps/game-engine/`)
+- **NestJS** framework
+- **WebSocket Gateway** for real-time events
+- **In-memory game state** (Redis integration planned)
 
-### Step 1
+#### Shared Types (`libs/shared-types/`)
+- Common TypeScript interfaces
+- WebSocket event definitions
+- Game state types
 
-To connect to Nx Cloud, run the following command:
+## 🎯 Core Game Mechanics
 
-```sh
-npx nx connect
-```
+### Shop System
+- 6 shop slots with dynamic piece generation
+- Reroll system (2g cost)
+- Shop locking mechanism
+- Rarity-weighted piece distribution
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+### Tank Management
+- 8×6 grid placement system
+- Drag-and-drop piece positioning
+- Water quality affects piece performance
+- Shape-based piece placement validation
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### Battle System
+- Turn-based combat simulation
+- Stat comparison system
+- Reward calculation based on performance
+- Loss streak bonus system
 
-### Step 2
+### Economy
+- Gold-based purchase system
+- Interest accumulation (1g per 10g, max 5g)
+- Sell pieces for 50% value
+- Battle rewards and bonuses
 
-Use the following command to configure a CI workflow for your workspace:
+## 🔮 Extensibility
 
-```sh
-npx nx g ci-workflow
-```
+The architecture is designed for easy extension:
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### Adding New Pieces
+1. Add piece definition to `game-engine/src/app/data/pieces.ts`
+2. Update shared types if needed
+3. Add UI icons/styling to frontend components
 
-## Install Nx Console
+### Adding New Game Modes
+1. Create new service in game-engine
+2. Add WebSocket events to shared-types
+3. Create new frontend components
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+### Adding Persistence
+1. Replace in-memory storage with Redis/Database
+2. Add user authentication
+3. Implement save/load functionality
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## 🤝 Contributing
 
-## Useful links
+1. Follow the existing code style
+2. Add tests for new features
+3. Update documentation
+4. Submit PRs with clear descriptions
 
-Learn more:
+## 📝 License
 
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+This project is for educational purposes and demonstrates modern full-stack architecture patterns.
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+---
+
+*Built with ❤️ using Nx, Next.js, NestJS, and TypeScript*

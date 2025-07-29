@@ -1,0 +1,185 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { GameState, GamePiece, Position, BattleResult } from '@aquarium/shared-types';
+import { io, Socket } from 'socket.io-client';
+import { SOCKET_EVENTS } from '@aquarium/shared-types';
+
+interface GameContextType {
+  gameState: GameState | null;
+  socket: Socket | null;
+  connected: boolean;
+  
+  // Actions
+  purchasePiece: (pieceId: string, shopIndex: number) => void;
+  sellPiece: (pieceId: string) => void;
+  placePiece: (piece: GamePiece, position: Position) => void;
+  movePiece: (pieceId: string, position: Position) => void;
+  rerollShop: () => void;
+  startBattle: () => void;
+  toggleShopLock: (index: number) => void;
+}
+
+const GameContext = createContext<GameContextType | undefined>(undefined);
+
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    // Initialize socket connection
+    const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001', {
+      transports: ['websocket'],
+    });
+
+    socketInstance.on('connect', () => {
+      console.log('Connected to game server');
+      setConnected(true);
+      
+      // Initialize session
+      socketInstance.emit(SOCKET_EVENTS.SESSION_INIT, {
+        playerId: 'player-' + Math.random().toString(36).substr(2, 9),
+      });
+    });
+
+    socketInstance.on('disconnect', () => {
+      console.log('Disconnected from game server');
+      setConnected(false);
+    });
+
+    socketInstance.on(SOCKET_EVENTS.GAME_STATE_UPDATE, (state: GameState) => {
+      console.log('🔄 GAME STATE UPDATE:', {
+        gold: state.gold,
+        shopItems: state.shop.length,
+        tankPieces: state.playerTank.pieces.length,
+        lockedIndex: state.lockedShopIndex,
+        phase: state.phase
+      });
+      console.log('🏪 Shop contents:', state.shop.map((piece, i) => piece ? `${i}: ${piece.name}` : `${i}: empty`));
+      console.log('🐟 Tank pieces:', state.playerTank.pieces.map(p => `${p.name} at ${p.position ? `(${p.position.x},${p.position.y})` : 'no position'}`));
+      setGameState(state);
+    });
+
+    socketInstance.on(SOCKET_EVENTS.ERROR, (error: any) => {
+      console.error('❌ WEBSOCKET ERROR:', error);
+    });
+
+    setSocket(socketInstance);
+
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, []);
+
+  const purchasePiece = (pieceId: string, shopIndex: number) => {
+    if (!socket || !connected || !gameState) return;
+    
+    const purchaseData = {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+      pieceId,
+      shopIndex,
+    };
+    
+    console.log('🛒 PURCHASE REQUEST:', purchaseData);
+    console.log('💰 Current Gold:', gameState.gold);
+    console.log('🏪 Shop Item:', gameState.shop[shopIndex]);
+    
+    socket.emit(SOCKET_EVENTS.SHOP_BUY, purchaseData);
+  };
+
+  const sellPiece = (pieceId: string) => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.SHOP_SELL, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+      pieceId,
+    });
+  };
+
+  const placePiece = (piece: GamePiece, position: Position) => {
+    if (!socket || !connected || !gameState) return;
+    
+    const placeData = {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+      pieceId: piece.id,
+      position,
+      action: 'place' as const,
+    };
+    
+    console.log('🎯 PLACE REQUEST:', placeData);
+    console.log('🐠 Piece to place:', piece);
+    console.log('📍 Position:', position);
+    console.log('🔷 Piece shape:', piece.shape);
+    
+    socket.emit(SOCKET_EVENTS.TANK_UPDATE, placeData);
+  };
+
+  const movePiece = (pieceId: string, position: Position) => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.TANK_UPDATE, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+      pieceId,
+      position,
+      action: 'move',
+    });
+  };
+
+  const rerollShop = () => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.SHOP_REROLL, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+    });
+  };
+
+  const startBattle = () => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.BATTLE_START, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+    });
+  };
+
+  const toggleShopLock = (index: number) => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.SHOP_LOCK, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+      shopIndex: index,
+    });
+  };
+
+  return (
+    <GameContext.Provider value={{
+      gameState,
+      socket,
+      connected,
+      purchasePiece,
+      sellPiece,
+      placePiece,
+      movePiece,
+      rerollShop,
+      startBattle,
+      toggleShopLock,
+    }}>
+      {children}
+    </GameContext.Provider>
+  );
+}
+
+export function useGame() {
+  const context = useContext(GameContext);
+  if (context === undefined) {
+    throw new Error('useGame must be used within a GameProvider');
+  }
+  return context;
+}

@@ -1,0 +1,17 @@
+{
+  "name": "game-engine-e2e",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "implicitDependencies": ["game-engine"],
+  "projectType": "application",
+  "targets": {
+    "e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{e2eProjectRoot}"],
+      "options": {
+        "jestConfig": "game-engine-e2e/jest.config.ts",
+        "passWithNoTests": true
+      },
+      "dependsOn": ["game-engine:build", "game-engine:serve"]
+    }
+  }
+}
