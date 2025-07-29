@@ -69,10 +69,16 @@ export const SOCKET_EVENTS = {
   SHOP_LOCK: 'shop:lock',
   TANK_UPDATE: 'tank:update',
   BATTLE_START: 'battle:start',
+  GET_CALCULATED_STATS: 'stats:get',
+  SAVE_DRAFT_STATE: 'draft:save',
+  RESTORE_DRAFT_STATE: 'draft:restore',
+  CONFIRM_PLACEMENT: 'draft:confirm',
   
   // Server -> Client
   GAME_STATE_UPDATE: 'game:state:update',
   BATTLE_STEP: 'battle:step',
   BATTLE_COMPLETE: 'battle:complete',
+  CALCULATED_STATS_UPDATE: 'stats:update',
+  DRAFT_STATE_SAVED: 'draft:saved',
   ERROR: 'error'
 } as const;

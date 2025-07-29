@@ -44,6 +44,12 @@ export interface BattleEvent {
 
 export type BattleResult = 'player' | 'opponent' | 'draw';
 
+export interface DraftState {
+  pieces: GamePiece[];
+  grid: (string | null)[][];
+  lastModified: number;
+}
+
 export interface GameState {
   phase: 'shop' | 'placement' | 'battle' | 'results';
   round: number;
@@ -64,6 +70,7 @@ export interface GameState {
   lockedShopIndex: number | null;
   goldHistory: GoldTransaction[];
   rerollsThisRound: number;
+  draftState?: DraftState;
 }
 
 export interface GoldTransaction {

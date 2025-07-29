@@ -1,9 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run dev:*)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "Bash(npm run start:*)",
+      "Bash(start.bat)",
+      "Bash(cmd:*)",
+      "Bash(npm install:*)",
+      "Bash(powershell:*)"
     ],
     "deny": []
   }

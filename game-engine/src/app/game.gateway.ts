@@ -177,4 +177,63 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+
+  @SubscribeMessage(SOCKET_EVENTS.GET_CALCULATED_STATS)
+  async handleGetCalculatedStats(@ConnectedSocket() client: Socket) {
+    try {
+      const calculatedStats = await this.gameService.getCalculatedStats(client.id);
+      
+      client.emit(SOCKET_EVENTS.CALCULATED_STATS_UPDATE, calculatedStats);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'STATS_CALCULATION_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage(SOCKET_EVENTS.SAVE_DRAFT_STATE)
+  async handleSaveDraftState(@ConnectedSocket() client: Socket) {
+    try {
+      const draftState = await this.gameService.saveDraftState(client.id);
+      
+      client.emit(SOCKET_EVENTS.DRAFT_STATE_SAVED, draftState);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'DRAFT_SAVE_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage(SOCKET_EVENTS.RESTORE_DRAFT_STATE)
+  async handleRestoreDraftState(
+    @MessageBody() data: { draftState: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const gameState = await this.gameService.restoreDraftState(client.id, data.draftState);
+      
+      client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'DRAFT_RESTORE_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage(SOCKET_EVENTS.CONFIRM_PLACEMENT)
+  async handleConfirmPlacement(@ConnectedSocket() client: Socket) {
+    try {
+      const gameState = await this.gameService.confirmPlacement(client.id);
+      
+      client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'PLACEMENT_CONFIRMATION_FAILED',
+        message: error.message,
+      });
+    }
+  }
 }

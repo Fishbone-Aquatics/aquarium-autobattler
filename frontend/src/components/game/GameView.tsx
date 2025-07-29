@@ -48,7 +48,7 @@ const getTypeColors = (type: string) => {
 };
 
 export function GameView() {
-  const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock } = useGame();
+  const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock, confirmPlacement } = useGame();
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [hoveredPiece, setHoveredPiece] = useState<GamePiece | null>(null);
   const [hoveredGridPiece, setHoveredGridPiece] = useState<GamePiece | null>(null);
@@ -430,10 +430,10 @@ export function GameView() {
                 <button
                   className="w-full mt-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition-all"
                   onClick={() => {
-                    // Handle battle preparation
+                    confirmPlacement();
                   }}
                 >
-                  Battle Preparation →
+                  Confirm Placement & Battle Prep →
                 </button>
               )}
             </div>

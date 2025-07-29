@@ -1,14 +1,18 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { GameState, GamePiece, Position, BattleResult } from '@aquarium/shared-types';
+import { GameState, GamePiece, Position, BattleResult, DraftState } from '@aquarium/shared-types';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@aquarium/shared-types';
+import { DraftStateManager } from '../utils/draftStateManager';
 
 interface GameContextType {
   gameState: GameState | null;
   socket: Socket | null;
   connected: boolean;
+  calculatedStats: { [pieceId: string]: { attack: number; health: number; speed: number } } | null;
+  hasDraftState: boolean;
+  draftStateAge: number | null;
   
   // Actions
   purchasePiece: (pieceId: string, shopIndex: number) => void;
@@ -18,6 +22,13 @@ interface GameContextType {
   rerollShop: () => void;
   startBattle: () => void;
   toggleShopLock: (index: number) => void;
+  
+  // Draft state management
+  saveDraftState: () => void;
+  restoreDraftState: () => void;
+  clearDraftState: () => void;
+  confirmPlacement: () => void;
+  requestStatCalculation: () => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -26,6 +37,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [calculatedStats, setCalculatedStats] = useState<{ [pieceId: string]: { attack: number; health: number; speed: number } } | null>(null);
+  const [hasDraftState, setHasDraftState] = useState(false);
+  const [draftStateAge, setDraftStateAge] = useState<number | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize socket connection
@@ -59,10 +74,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.log('🏪 Shop contents:', state.shop.map((piece, i) => piece ? `${i}: ${piece.name}` : `${i}: empty`));
       console.log('🐟 Tank pieces:', state.playerTank.pieces.map(p => `${p.name} at ${p.position ? `(${p.position.x},${p.position.y})` : 'no position'}`));
       setGameState(state);
+      
+      // Update session ID for draft state management
+      if (!sessionId) {
+        setSessionId(state.playerTank.id);
+      }
+      
+      // Request updated stats after game state changes
+      socketInstance.emit(SOCKET_EVENTS.GET_CALCULATED_STATS);
     });
 
     socketInstance.on(SOCKET_EVENTS.ERROR, (error: any) => {
       console.error('❌ WEBSOCKET ERROR:', error);
+    });
+
+    // Handle calculated stats updates
+    socketInstance.on(SOCKET_EVENTS.CALCULATED_STATS_UPDATE, (stats: { [pieceId: string]: { attack: number; health: number; speed: number } }) => {
+      console.log('📊 CALCULATED STATS UPDATE:', stats);
+      setCalculatedStats(stats);
+    });
+
+    // Handle draft state events
+    socketInstance.on(SOCKET_EVENTS.DRAFT_STATE_SAVED, (draftState: DraftState) => {
+      console.log('💾 DRAFT STATE SAVED:', draftState);
+      if (sessionId) {
+        DraftStateManager.saveDraftState(sessionId, draftState);
+        updateDraftStateStatus();
+      }
     });
 
     setSocket(socketInstance);
@@ -71,6 +109,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socketInstance.disconnect();
     };
   }, []);
+
+  // Helper function to update draft state status
+  const updateDraftStateStatus = () => {
+    if (sessionId) {
+      setHasDraftState(DraftStateManager.hasDraftState(sessionId));
+      setDraftStateAge(DraftStateManager.getDraftStateAge(sessionId));
+    }
+  };
+
+  // Update draft state status when sessionId changes
+  useEffect(() => {
+    updateDraftStateStatus();
+  }, [sessionId]);
 
   const purchasePiece = (pieceId: string, shopIndex: number) => {
     if (!socket || !connected || !gameState) return;
@@ -158,11 +209,47 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Draft state management functions
+  const saveDraftState = () => {
+    if (!socket || !connected) return;
+    socket.emit(SOCKET_EVENTS.SAVE_DRAFT_STATE);
+  };
+
+  const restoreDraftState = () => {
+    if (!socket || !connected || !sessionId) return;
+    
+    const draftState = DraftStateManager.loadDraftState(sessionId);
+    if (draftState) {
+      socket.emit(SOCKET_EVENTS.RESTORE_DRAFT_STATE, { draftState });
+    }
+  };
+
+  const clearDraftState = () => {
+    DraftStateManager.clearDraftState();
+    updateDraftStateStatus();
+  };
+
+  const confirmPlacement = () => {
+    if (!socket || !connected) return;
+    socket.emit(SOCKET_EVENTS.CONFIRM_PLACEMENT);
+    // Clear draft state after confirmation
+    DraftStateManager.clearDraftState();
+    updateDraftStateStatus();
+  };
+
+  const requestStatCalculation = () => {
+    if (!socket || !connected) return;
+    socket.emit(SOCKET_EVENTS.GET_CALCULATED_STATS);
+  };
+
   return (
     <GameContext.Provider value={{
       gameState,
       socket,
       connected,
+      calculatedStats,
+      hasDraftState,
+      draftStateAge,
       purchasePiece,
       sellPiece,
       placePiece,
@@ -170,6 +257,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       rerollShop,
       startBattle,
       toggleShopLock,
+      saveDraftState,
+      restoreDraftState,
+      clearDraftState,
+      confirmPlacement,
+      requestStatCalculation,
     }}>
       {children}
     </GameContext.Provider>

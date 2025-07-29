@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { GameState, GamePiece, Position, BattleResult, Tank } from '@aquarium/shared-types';
+import { GameState, GamePiece, Position, BattleResult, Tank, DraftState } from '@aquarium/shared-types';
 import { PIECE_LIBRARY } from './data/pieces';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -227,6 +227,10 @@ export class GameService {
     }
 
     this.sessions.set(sessionId, gameState);
+    
+    // Automatically save draft state after tank updates
+    await this.saveDraftState(sessionId);
+    
     return gameState;
   }
 
@@ -394,5 +398,136 @@ export class GameService {
       winner,
       events: [],
     };
+  }
+
+  // Calculate piece stats with adjacency bonuses
+  private calculatePieceStats(piece: GamePiece, allPieces: GamePiece[]): { attack: number; health: number; speed: number } {
+    if (!piece.position) {
+      return { attack: piece.stats.attack, health: piece.stats.health, speed: piece.stats.speed };
+    }
+
+    let attackBonus = 0;
+    let healthBonus = 0;
+    let speedBonus = 0;
+
+    // Get adjacent positions (8 directions)
+    const adjacentPositions = [
+      { x: piece.position.x - 1, y: piece.position.y - 1 },
+      { x: piece.position.x, y: piece.position.y - 1 },
+      { x: piece.position.x + 1, y: piece.position.y - 1 },
+      { x: piece.position.x - 1, y: piece.position.y },
+      { x: piece.position.x + 1, y: piece.position.y },
+      { x: piece.position.x - 1, y: piece.position.y + 1 },
+      { x: piece.position.x, y: piece.position.y + 1 },
+      { x: piece.position.x + 1, y: piece.position.y + 1 },
+    ];
+
+    // Find adjacent pieces
+    const adjacentPieces = allPieces.filter(p => 
+      p.position && p.id !== piece.id && adjacentPositions.some(pos => 
+        p.position!.x === pos.x && p.position!.y === pos.y
+      )
+    );
+
+    // Apply adjacency bonuses
+    adjacentPieces.forEach(adjacentPiece => {
+      if ((adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && piece.type === 'fish') {
+        if (adjacentPiece.attackBonus) attackBonus += adjacentPiece.attackBonus;
+        if (adjacentPiece.healthBonus) healthBonus += adjacentPiece.healthBonus;
+        if (adjacentPiece.speedBonus) speedBonus += adjacentPiece.speedBonus;
+      }
+    });
+
+    // Schooling fish bonuses
+    if (piece.tags.includes('schooling')) {
+      const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
+      
+      if (piece.name === 'Neon Tetra') {
+        attackBonus += adjacentSchoolingCount;
+      }
+      
+      if (piece.name === 'Cardinal Tetra') {
+        attackBonus += adjacentSchoolingCount * 2;
+      }
+
+      // Double speed if 3+ schooling fish adjacent
+      if (adjacentSchoolingCount >= 3) {
+        speedBonus += piece.stats.speed;
+      }
+    }
+
+    return {
+      attack: piece.stats.attack + attackBonus,
+      health: piece.stats.health + healthBonus,
+      speed: piece.stats.speed + speedBonus
+    };
+  }
+
+  // Get calculated stats for all pieces
+  async getCalculatedStats(sessionId: string): Promise<{ [pieceId: string]: { attack: number; health: number; speed: number } }> {
+    const gameState = await this.getSession(sessionId);
+    const result: { [pieceId: string]: { attack: number; health: number; speed: number } } = {};
+    
+    const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
+    
+    placedPieces.forEach(piece => {
+      result[piece.id] = this.calculatePieceStats(piece, placedPieces);
+    });
+    
+    return result;
+  }
+
+  // Save draft state (called on each action)
+  async saveDraftState(sessionId: string): Promise<DraftState> {
+    const gameState = await this.getSession(sessionId);
+    
+    const draftState: DraftState = {
+      pieces: gameState.playerTank.pieces,
+      grid: gameState.playerTank.grid,
+      lastModified: Date.now()
+    };
+    
+    gameState.draftState = draftState;
+    this.sessions.set(sessionId, gameState);
+    
+    return draftState;
+  }
+
+  // Restore draft state
+  async restoreDraftState(sessionId: string, draftState: DraftState): Promise<GameState> {
+    const gameState = await this.getSession(sessionId);
+    
+    // Only restore if in shop phase
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only restore draft during shop phase');
+    }
+    
+    // Validate draft state pieces
+    const validPieces = draftState.pieces.filter(piece => {
+      // Ensure pieces are actually owned
+      return gameState.playerTank.pieces.some(p => p.id === piece.id);
+    });
+    
+    gameState.playerTank.pieces = validPieces;
+    gameState.playerTank.grid = draftState.grid;
+    gameState.draftState = draftState;
+    
+    this.sessions.set(sessionId, gameState);
+    return gameState;
+  }
+
+  // Confirm placement and lock in state
+  async confirmPlacement(sessionId: string): Promise<GameState> {
+    const gameState = await this.getSession(sessionId);
+    
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only confirm placement during shop phase');
+    }
+    
+    // Clear draft state as it's now confirmed
+    gameState.draftState = undefined;
+    
+    this.sessions.set(sessionId, gameState);
+    return gameState;
   }
 }
