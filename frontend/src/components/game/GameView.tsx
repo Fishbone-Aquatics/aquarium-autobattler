@@ -6,14 +6,54 @@ import { Header } from '../ui/Header';
 import { Footer } from '../ui/Footer';
 import { Shop } from './Shop';
 import { TankGrid } from './TankGrid';
+import { TankSummary } from './TankSummary';
 import { Loader2 } from 'lucide-react';
 import { GamePiece, Position } from '@aquarium/shared-types';
+import { analyzeTank } from '../../utils/tankAnalysis';
+import { PLANT_BONUSES, SCHOOLING_BONUSES, getPieceBonuses } from '../../utils/bonusConfig';
+
+// Type-based color mapping
+const getTypeColors = (type: string) => {
+  switch (type) {
+    case 'plant':
+      return {
+        grid: 'from-green-400 to-green-600',
+        border: 'border-green-700',
+        tag: 'bg-green-600 text-white',
+        tagActive: 'bg-green-400 text-black'
+      };
+    case 'consumable':
+      return {
+        grid: 'from-orange-400 to-orange-600',
+        border: 'border-orange-700',
+        tag: 'bg-orange-600 text-white',
+        tagActive: 'bg-orange-400 text-black'
+      };
+    case 'equipment':
+      return {
+        grid: 'from-gray-400 to-gray-600',
+        border: 'border-gray-700',
+        tag: 'bg-gray-600 text-white',
+        tagActive: 'bg-gray-400 text-black'
+      };
+    case 'fish':
+    default:
+      return {
+        grid: 'from-blue-400 to-blue-600',
+        border: 'border-blue-700',
+        tag: 'bg-blue-600 text-white',
+        tagActive: 'bg-blue-400 text-black'
+      };
+  }
+};
 
 export function GameView() {
   const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock } = useGame();
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [hoveredPiece, setHoveredPiece] = useState<GamePiece | null>(null);
+  const [hoveredGridPiece, setHoveredGridPiece] = useState<GamePiece | null>(null);
   const [highlightedPieceId, setHighlightedPieceId] = useState<string | null>(null);
+  const [synergyBonuses, setSynergyBonuses] = useState<string[]>([]);
   const [pendingPlacement, setPendingPlacement] = useState<{piece: GamePiece, position: Position} | null>(null);
   const [mousePosition, setMousePosition] = useState<{x: number, y: number}>({x: 0, y: 0});
 
@@ -51,6 +91,84 @@ export function GameView() {
     }
   };
 
+  const calculateAdjacencyBonuses = (targetPiece: GamePiece, allPieces: GamePiece[]) => {
+    if (!targetPiece.position) return { attack: 0, health: 0, speed: 0, bonuses: [] };
+
+    const bonuses: string[] = [];
+    let attackBonus = 0;
+    let healthBonus = 0;
+    let speedBonus = 0;
+
+    // Get adjacent positions (8 directions)
+    const adjacentPositions = [
+      { x: targetPiece.position.x - 1, y: targetPiece.position.y - 1 },
+      { x: targetPiece.position.x, y: targetPiece.position.y - 1 },
+      { x: targetPiece.position.x + 1, y: targetPiece.position.y - 1 },
+      { x: targetPiece.position.x - 1, y: targetPiece.position.y },
+      { x: targetPiece.position.x + 1, y: targetPiece.position.y },
+      { x: targetPiece.position.x - 1, y: targetPiece.position.y + 1 },
+      { x: targetPiece.position.x, y: targetPiece.position.y + 1 },
+      { x: targetPiece.position.x + 1, y: targetPiece.position.y + 1 },
+    ];
+
+    // Find adjacent pieces
+    const adjacentPieces = allPieces.filter(p => 
+      p.position && adjacentPositions.some(pos => 
+        p.position!.x === pos.x && p.position!.y === pos.y
+      )
+    );
+
+    // Adjacency bonuses
+    adjacentPieces.forEach(adjacentPiece => {
+      const pieceBonus = getPieceBonuses(adjacentPiece);
+      
+      if (pieceBonus && (adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && targetPiece.type === 'fish') {
+        if (pieceBonus.attack) attackBonus += pieceBonus.attack;
+        if (pieceBonus.health) healthBonus += pieceBonus.health;
+        if (pieceBonus.speed) speedBonus += pieceBonus.speed;
+        bonuses.push(`${adjacentPiece.name} (${pieceBonus.description})`);
+      }
+    });
+
+    // Schooling fish bonuses
+    if (targetPiece.tags.includes('schooling')) {
+      const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
+      
+      if (targetPiece.name === 'Neon Tetra') {
+        attackBonus += adjacentSchoolingCount;
+        if (adjacentSchoolingCount > 0) {
+          bonuses.push(`Schooling (+${adjacentSchoolingCount} ATK)`);
+        }
+      }
+      
+      if (targetPiece.name === 'Cardinal Tetra') {
+        attackBonus += adjacentSchoolingCount * 2;
+        if (adjacentSchoolingCount > 0) {
+          bonuses.push(`Schooling (+${adjacentSchoolingCount * 2} ATK)`);
+        }
+      }
+
+      // Double speed if 3+ schooling fish adjacent
+      if (adjacentSchoolingCount >= 3) {
+        speedBonus += targetPiece.stats.speed; // Double speed = +current speed
+        bonuses.push('School Frenzy (Double Speed)');
+      }
+    }
+
+    return { attack: attackBonus, health: healthBonus, speed: speedBonus, bonuses };
+  };
+
+  const handleGridPieceHover = (piece: GamePiece | null) => {
+    setHoveredGridPiece(piece);
+    if (piece && gameState) {
+      const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
+      const { bonuses } = calculateAdjacencyBonuses(piece, placedPieces);
+      setSynergyBonuses(bonuses);
+    } else {
+      setSynergyBonuses([]);
+    }
+  };
+
   // Handle pending placement after purchase
   useEffect(() => {
     if (pendingPlacement && gameState) {
@@ -75,11 +193,11 @@ export function GameView() {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
 
-    if (hoveredPiece) {
+    if (hoveredPiece || hoveredGridPiece) {
       document.addEventListener('mousemove', handleMouseMove);
       return () => document.removeEventListener('mousemove', handleMouseMove);
     }
-  }, [hoveredPiece]);
+  }, [hoveredPiece, hoveredGridPiece]);
 
   const handleDragPlace = (piece: GamePiece, position: Position) => {
     console.log('🎯 DRAG PLACE:', piece.name, 'at position:', position);
@@ -112,6 +230,9 @@ export function GameView() {
       </div>
     );
   }
+
+  // Calculate tank analysis for the summary
+  const tankAnalysis = analyzeTank(gameState.playerTank.pieces);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -165,7 +286,93 @@ export function GameView() {
                   <div className="text-purple-300 font-semibold mb-1">Tags:</div>
                   <div className="flex flex-wrap gap-1">
                     {hoveredPiece.tags.map((tag) => (
-                      <span key={tag} className="bg-purple-800 text-xs px-1 py-0.5 rounded">
+                      <span key={tag} className={`text-xs px-1 py-0.5 rounded ${getTypeColors(hoveredPiece.type).tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Grid Piece Tooltip */}
+        {hoveredGridPiece && (
+          <div 
+            className="fixed z-50 bg-black text-white p-4 rounded-lg shadow-lg max-w-xs pointer-events-none"
+            style={{
+              left: mousePosition.x + 15 > window.innerWidth - 300 
+                ? mousePosition.x - 315 
+                : mousePosition.x + 15,
+              top: Math.max(10, Math.min(window.innerHeight - 200, mousePosition.y - 10)),
+              transform: 'translateY(-50%)',
+            }}
+          >
+            <h3 className="font-bold text-yellow-300 mb-2">{hoveredGridPiece.name}</h3>
+            <div className="text-sm space-y-1">
+              {(() => {
+                const placedPieces = gameState?.playerTank.pieces.filter(p => p.position) || [];
+                const { attack: atkBonus, health: hpBonus, speed: spdBonus } = calculateAdjacencyBonuses(hoveredGridPiece, placedPieces);
+                const baseAttack = hoveredGridPiece.stats.attack;
+                const baseHealth = hoveredGridPiece.stats.health;
+                const baseSpeed = hoveredGridPiece.stats.speed;
+                const finalAttack = baseAttack + atkBonus;
+                const finalHealth = baseHealth + hpBonus;
+                const finalSpeed = baseSpeed + spdBonus;
+                
+                return (
+                  <>
+                    <div className="flex gap-3 mb-2">
+                      <span className={atkBonus > 0 ? 'text-green-300 font-bold' : ''}>
+                        ⚔️ {finalAttack}{atkBonus > 0 && ` (+${atkBonus})`}
+                      </span>
+                      <span className={hpBonus > 0 ? 'text-green-300 font-bold' : ''}>
+                        ❤️ {finalHealth}{hpBonus > 0 && ` (+${hpBonus})`}
+                      </span>
+                      <span className={spdBonus > 0 ? 'text-green-300 font-bold' : ''}>
+                        ⚡ {finalSpeed}{spdBonus > 0 && ` (+${spdBonus})`}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400 border-t border-gray-600 pt-1">
+                      Base: ⚔️{baseAttack} ❤️{baseHealth} ⚡{baseSpeed}
+                    </div>
+                  </>
+                );
+              })()}
+              {hoveredGridPiece.position && (
+                <div className="text-xs text-gray-400 border-t border-gray-600 pt-1 mt-2">
+                  Position: ({hoveredGridPiece.position.x}, {hoveredGridPiece.position.y})
+                </div>
+              )}
+              {synergyBonuses.length > 0 && (
+                <div className="mt-2 border-t border-yellow-600 pt-2">
+                  <div className="text-yellow-300 font-semibold mb-1">Adjacency Bonuses:</div>
+                  <div className="space-y-1">
+                    {synergyBonuses.map((bonus) => (
+                      <div key={bonus} className="bg-yellow-600 text-black text-xs px-2 py-0.5 rounded font-bold">
+                        {bonus}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hoveredGridPiece.abilities && hoveredGridPiece.abilities.length > 0 && (
+                <div className="mt-2 border-t border-gray-600 pt-2">
+                  <div className="text-blue-300 font-semibold mb-1">Abilities:</div>
+                  {hoveredGridPiece.abilities.map((ability, index) => (
+                    <div key={index} className="text-gray-300 text-xs italic">
+                      {ability}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {hoveredGridPiece.tags.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-purple-300 font-semibold mb-1">Tags:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {hoveredGridPiece.tags.map((tag) => (
+                      <span key={tag} className={`text-xs px-1 py-0.5 rounded ${getTypeColors(hoveredGridPiece.type).tag}`}>
                         {tag}
                       </span>
                     ))}
@@ -194,6 +401,7 @@ export function GameView() {
               onHover={handleHover}
               draggedPiece={draggedPiece}
               hoveredPiece={hoveredPiece}
+              getTypeColors={getTypeColors}
             />
           </div>
 
@@ -214,6 +422,8 @@ export function GameView() {
                 interactive={gameState.phase === 'shop'}
                 externalDraggedPiece={draggedPiece}
                 highlightedPieceId={highlightedPieceId}
+                onPieceHover={handleGridPieceHover}
+                getTypeColors={getTypeColors}
               />
 
               {gameState.phase === 'shop' && (
@@ -226,6 +436,15 @@ export function GameView() {
                   Battle Preparation →
                 </button>
               )}
+            </div>
+            
+            {/* Tank Summary - Battle Stats */}
+            <div className="mt-4">
+              <TankSummary 
+                analysis={tankAnalysis}
+                waterQuality={gameState.playerTank.waterQuality}
+                showDetailed={true}
+              />
             </div>
           </div>
 
@@ -268,15 +487,23 @@ export function GameView() {
                                 {piece.type} • {piece.rarity}
                               </p>
                               <div className="flex gap-2 mt-1">
-                                <span className="text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded">
-                                  ⚔️ {piece.stats.attack}
-                                </span>
-                                <span className="text-xs bg-pink-100 text-pink-700 px-1 py-0.5 rounded">
-                                  ❤️ {piece.stats.health}
-                                </span>
-                                <span className="text-xs bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
-                                  ⚡ {piece.stats.speed}
-                                </span>
+                                {(() => {
+                                  const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
+                                  const { attack: atkBonus, health: hpBonus, speed: spdBonus } = calculateAdjacencyBonuses(piece, placedPieces);
+                                  return (
+                                    <>
+                                      <span className={`text-xs px-1 py-0.5 rounded ${atkBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-red-100 text-red-700'}`}>
+                                        ⚔️ {piece.stats.attack + atkBonus}{atkBonus > 0 && ` (+${atkBonus})`}
+                                      </span>
+                                      <span className={`text-xs px-1 py-0.5 rounded ${hpBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-pink-100 text-pink-700'}`}>
+                                        ❤️ {piece.stats.health + hpBonus}{hpBonus > 0 && ` (+${hpBonus})`}
+                                      </span>
+                                      <span className={`text-xs px-1 py-0.5 rounded ${spdBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-blue-100 text-blue-700'}`}>
+                                        ⚡ {piece.stats.speed + spdBonus}{spdBonus > 0 && ` (+${spdBonus})`}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <div className="flex flex-col items-end">
@@ -309,15 +536,23 @@ export function GameView() {
                               {piece.type} • {piece.rarity}
                             </p>
                             <div className="flex gap-2 mt-1">
-                              <span className="text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded">
-                                ⚔️ {piece.stats.attack}
-                              </span>
-                              <span className="text-xs bg-pink-100 text-pink-700 px-1 py-0.5 rounded">
-                                ❤️ {piece.stats.health}
-                              </span>
-                              <span className="text-xs bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
-                                ⚡ {piece.stats.speed}
-                              </span>
+                              {(() => {
+                                const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
+                                const { attack: atkBonus, health: hpBonus, speed: spdBonus } = calculateAdjacencyBonuses(piece, placedPieces);
+                                return (
+                                  <>
+                                    <span className={`text-xs px-1 py-0.5 rounded ${atkBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-red-100 text-red-700'}`}>
+                                      ⚔️ {piece.stats.attack + atkBonus}{atkBonus > 0 && ` (+${atkBonus})`}
+                                    </span>
+                                    <span className={`text-xs px-1 py-0.5 rounded ${hpBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-pink-100 text-pink-700'}`}>
+                                      ❤️ {piece.stats.health + hpBonus}{hpBonus > 0 && ` (+${hpBonus})`}
+                                    </span>
+                                    <span className={`text-xs px-1 py-0.5 rounded ${spdBonus > 0 ? 'bg-green-200 text-green-800 font-bold' : 'bg-blue-100 text-blue-700'}`}>
+                                      ⚡ {piece.stats.speed + spdBonus}{spdBonus > 0 && ` (+${spdBonus})`}
+                                    </span>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">

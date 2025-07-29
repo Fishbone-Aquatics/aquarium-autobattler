@@ -15,6 +15,7 @@ interface PieceCardProps {
   canAfford?: boolean;
   isSelected?: boolean;
   isDragging?: boolean;
+  getTypeColors?: (type: string) => { grid: string; border: string; tag: string; tagActive: string };
 }
 
 const rarityColors = {
@@ -43,7 +44,8 @@ export function PieceCard({
   onHover,
   canAfford = true,
   isSelected = false,
-  isDragging = false 
+  isDragging = false,
+  getTypeColors
 }: PieceCardProps) {
   const [isViewAbilitiesHovered, setIsViewAbilitiesHovered] = useState(false);
   if (compact) {
@@ -170,7 +172,7 @@ export function PieceCard({
       {piece.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2 justify-center">
           {piece.tags.map((tag) => (
-            <span key={tag} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+            <span key={tag} className={`text-xs px-2 py-1 rounded ${getTypeColors ? getTypeColors(piece.type).tag : 'bg-gray-100 text-gray-700'}`} title={`Type: ${piece.type}`}>
               {tag}
             </span>
           ))}

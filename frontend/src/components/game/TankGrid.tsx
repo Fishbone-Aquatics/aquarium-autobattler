@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GamePiece, Position } from '@aquarium/shared-types';
+import { PLANT_BONUSES, SCHOOLING_BONUSES, getPieceBonuses } from '../../utils/bonusConfig';
 
 interface TankGridProps {
   grid: (string | null)[][];
@@ -13,6 +14,8 @@ interface TankGridProps {
   interactive?: boolean;
   externalDraggedPiece?: GamePiece | null;
   highlightedPieceId?: string | null;
+  onPieceHover?: (piece: GamePiece | null) => void;
+  getTypeColors?: (type: string) => { grid: string; border: string; tag: string; tagActive: string };
 }
 
 export function TankGrid({
@@ -25,6 +28,8 @@ export function TankGrid({
   interactive = true,
   externalDraggedPiece,
   highlightedPieceId,
+  onPieceHover,
+  getTypeColors,
 }: TankGridProps) {
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [validDropPositions, setValidDropPositions] = useState<Position[]>([]);
@@ -225,20 +230,78 @@ export function TankGrid({
                     piece.position!.y + offset.y === y
                   ) && (
                     <div
-                      className={`absolute inset-0 bg-gradient-to-br from-blue-400 to-blue-600 rounded border-2 border-blue-700 flex items-center justify-center text-white text-xs font-bold ${piece.type} transition-all duration-300 ${
+                      className={`absolute inset-0 bg-gradient-to-br ${getTypeColors ? getTypeColors(piece.type).grid : 'from-blue-400 to-blue-600'} rounded border-2 ${getTypeColors ? getTypeColors(piece.type).border : 'border-blue-700'} flex items-center justify-center text-white text-xs font-bold transition-all duration-300 ${
                         highlightedPieceId === piece.id 
                           ? 'ring-4 ring-yellow-400 ring-opacity-75 scale-110 shadow-2xl z-10' 
                           : ''
-                      }`}
+                      } cursor-pointer hover:scale-105`}
                       draggable={interactive}
                       onDragStart={() => handleDragStart(piece)}
                       onDragEnd={handleDragEnd}
+                      onMouseEnter={() => onPieceHover?.(piece)}
+                      onMouseLeave={() => onPieceHover?.(null)}
                     >
                       {/* Only show text on the origin cell */}
                       {piece.position!.x === x && piece.position!.y === y && (
                         <div className="text-center pointer-events-none">
                           <div className="text-xs font-bold">{piece.name.split(' ')[0]}</div>
-                          <div className="text-[10px]">{piece.stats.attack}/{piece.stats.health}</div>
+                          {(() => {
+                            // Calculate buffed stats for display
+                            const placedPieces = pieces.filter(p => p.position);
+                            
+                            // Simple adjacency calculation for display (replicating the logic from GameView)
+                            let attackBonus = 0;
+                            let healthBonus = 0;
+                            
+                            if (piece.position) {
+                              // Get adjacent positions (8 directions)
+                              const adjacentPositions = [
+                                { x: piece.position.x - 1, y: piece.position.y - 1 },
+                                { x: piece.position.x, y: piece.position.y - 1 },
+                                { x: piece.position.x + 1, y: piece.position.y - 1 },
+                                { x: piece.position.x - 1, y: piece.position.y },
+                                { x: piece.position.x + 1, y: piece.position.y },
+                                { x: piece.position.x - 1, y: piece.position.y + 1 },
+                                { x: piece.position.x, y: piece.position.y + 1 },
+                                { x: piece.position.x + 1, y: piece.position.y + 1 },
+                              ];
+
+                              // Find adjacent pieces (simplified - just checking position, not full shape)
+                              const adjacentPieces = placedPieces.filter(p => 
+                                p.position && p.id !== piece.id && adjacentPositions.some(pos => 
+                                  p.position!.x === pos.x && p.position!.y === pos.y
+                                )
+                              );
+
+                              // Adjacency bonuses
+                              adjacentPieces.forEach(adjacentPiece => {
+                                const pieceBonus = getPieceBonuses(adjacentPiece);
+                                if (pieceBonus && (adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && piece.type === 'fish') {
+                                  if (pieceBonus.attack) attackBonus += pieceBonus.attack;
+                                  if (pieceBonus.health) healthBonus += pieceBonus.health;
+                                }
+                              });
+
+                              // Schooling fish bonuses
+                              if (piece.tags.includes('schooling')) {
+                                const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
+                                const schoolingBonus = SCHOOLING_BONUSES[piece.name];
+                                
+                                if (schoolingBonus && adjacentSchoolingCount > 0) {
+                                  attackBonus += adjacentSchoolingCount * schoolingBonus.attackPerSchooling;
+                                }
+                              }
+                            }
+                            
+                            const finalAttack = piece.stats.attack + attackBonus;
+                            const finalHealth = piece.stats.health + healthBonus;
+                            
+                            return (
+                              <div className="text-[10px]">
+                                {finalAttack}/{finalHealth}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

@@ -20,6 +20,7 @@ interface ShopProps {
   onHover?: (piece: GamePiece | null) => void;
   draggedPiece?: GamePiece | null;
   hoveredPiece?: GamePiece | null;
+  getTypeColors?: (type: string) => { grid: string; border: string; tag: string; tagActive: string };
 }
 
 export function Shop({
@@ -37,6 +38,7 @@ export function Shop({
   onHover,
   draggedPiece,
   hoveredPiece,
+  getTypeColors,
 }: ShopProps) {
   return (
     <div className="bg-gradient-to-b from-blue-500 to-teal-500 rounded-lg p-4 text-white">
@@ -135,6 +137,7 @@ export function Shop({
                     canAfford={gold >= piece.cost}
                     isSelected={hoveredPiece?.id === piece.id}
                     isDragging={draggedPiece?.id === piece.id}
+                    getTypeColors={getTypeColors}
                   />
                 </div>
               ) : (
