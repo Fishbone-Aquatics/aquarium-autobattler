@@ -1,26 +1,18 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { GameState, GamePiece, Position, BattleResult, Tank, DraftState } from '@aquarium/shared-types';
-import { PIECE_LIBRARY } from './data/pieces';
+import { GameState, GamePiece, Position, Tank, DraftState } from '@aquarium/shared-types';
+import { PIECE_LIBRARY } from '../app/data/pieces';
 import { v4 as uuidv4 } from 'uuid';
+import { PlayerService } from '../player/player.service';
 
 @Injectable()
 export class GameService {
-  private sessions = new Map<string, GameState>();
-  private socketToPlayer = new Map<string, string>(); // Maps socket ID to player ID
+  constructor(private playerService: PlayerService) {}
 
-  async createSession(sessionId: string, playerId: string): Promise<GameState> {
-    // Map socket ID to player ID
-    this.socketToPlayer.set(sessionId, playerId);
+  async createSession(socketId: string, playerId: string): Promise<GameState> {
+    // Map socket to player
+    this.playerService.mapSocketToPlayer(socketId, playerId);
     
-    // Check if player already has a session
-    const existingSession = this.sessions.get(playerId);
-    if (existingSession) {
-      console.log('🔄 Reconnecting to existing session for player:', playerId);
-      return existingSession;
-    }
-    
-    // Create new session for new player
-    console.log('🆕 Creating new session for player:', playerId);
+    // Create initial game state
     const initialState: GameState = {
       phase: 'shop',
       round: 1,
@@ -64,45 +56,25 @@ export class GameService {
       rerollsThisRound: 0,
     };
 
-    this.sessions.set(playerId, initialState);
-    return initialState;
+    // Get or create session
+    return this.playerService.getOrCreateSession(playerId, initialState);
   }
 
-  async getSession(sessionId: string): Promise<GameState> {
-    // Get player ID from socket ID
-    const playerId = this.socketToPlayer.get(sessionId);
-    if (!playerId) {
-      throw new NotFoundException('Player ID not found for socket');
-    }
-    
-    const session = this.sessions.get(playerId);
-    if (!session) {
-      throw new NotFoundException('Game session not found');
-    }
-    return session;
-  }
-  
-  private getPlayerIdFromSocket(socketId: string): string {
-    const playerId = this.socketToPlayer.get(socketId);
-    if (!playerId) {
-      throw new NotFoundException('Player ID not found for socket');
-    }
-    return playerId;
+  async getSession(socketId: string): Promise<GameState> {
+    const playerId = this.playerService.getPlayerIdFromSocket(socketId);
+    return this.playerService.getSession(playerId);
   }
 
-  async removeSession(sessionId: string): Promise<void> {
-    // Only remove the socket mapping, not the player session
-    // This allows reconnection with the same player ID
-    this.socketToPlayer.delete(sessionId);
-    console.log('🔌 Removed socket mapping for:', sessionId);
+  async removeSession(socketId: string): Promise<void> {
+    this.playerService.removeSocketMapping(socketId);
   }
 
   async purchasePiece(
-    sessionId: string,
+    socketId: string,
     pieceId: string,
     shopIndex: number,
   ): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
+    const gameState = await this.getSession(socketId);
     
     if (gameState.phase !== 'shop') {
       throw new BadRequestException('Can only purchase during shop phase');
@@ -141,12 +113,12 @@ export class GameService {
       pieceName: piece.name,
     });
 
-    this.sessions.set(sessionId, gameState);
+    this.updateGameState(socketId, gameState);
     return gameState;
   }
 
-  async sellPiece(sessionId: string, pieceId: string): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
+  async sellPiece(socketId: string, pieceId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
     
     if (gameState.phase !== 'shop') {
       throw new BadRequestException('Can only sell during shop phase');
@@ -179,12 +151,12 @@ export class GameService {
       pieceName: piece.name,
     });
 
-    this.sessions.set(sessionId, gameState);
+    this.updateGameState(socketId, gameState);
     return gameState;
   }
 
-  async rerollShop(sessionId: string): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
+  async rerollShop(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
     
     if (gameState.phase !== 'shop') {
       throw new BadRequestException('Can only reroll during shop phase');
@@ -216,17 +188,17 @@ export class GameService {
       timestamp: Date.now(),
     });
 
-    this.sessions.set(sessionId, gameState);
+    this.updateGameState(socketId, gameState);
     return gameState;
   }
 
   async updateTankPiece(
-    sessionId: string,
+    socketId: string,
     pieceId: string,
     position: Position,
     action: 'place' | 'move' | 'remove',
   ): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
+    const gameState = await this.getSession(socketId);
     
     if (gameState.phase !== 'shop') {
       throw new BadRequestException('Can only modify tank during shop phase');
@@ -256,13 +228,34 @@ export class GameService {
       this.placePieceOnGrid(gameState.playerTank, piece);
     }
 
-    this.sessions.set(sessionId, gameState);
-    
+    this.updateGameState(socketId, gameState);
     return gameState;
   }
 
-  async startBattle(sessionId: string): Promise<any> {
-    const gameState = await this.getSession(sessionId);
+  async toggleShopLock(socketId: string, shopIndex: number): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only lock/unlock during shop phase');
+    }
+
+    if (shopIndex < 0 || shopIndex >= gameState.shop.length) {
+      throw new BadRequestException('Invalid shop index');
+    }
+
+    // Toggle lock
+    if (gameState.lockedShopIndex === shopIndex) {
+      gameState.lockedShopIndex = null;
+    } else {
+      gameState.lockedShopIndex = shopIndex;
+    }
+
+    this.updateGameState(socketId, gameState);
+    return gameState;
+  }
+
+  async startBattle(socketId: string): Promise<any> {
+    const gameState = await this.getSession(socketId);
     
     // Simulate battle
     const battleResult = this.simulateBattle(gameState.playerTank, gameState.opponentTank);
@@ -318,7 +311,7 @@ export class GameService {
     // Generate new shop
     gameState.shop = this.generateShop();
     
-    this.sessions.set(sessionId, gameState);
+    this.updateGameState(socketId, gameState);
 
     return {
       winner: battleResult.winner,
@@ -328,6 +321,110 @@ export class GameService {
         interest,
       },
     };
+  }
+
+  async saveDraftState(socketId: string, draftState?: DraftState): Promise<DraftState> {
+    const gameState = await this.getSession(socketId);
+    
+    let stateToSave: DraftState;
+    if (draftState) {
+      const { draftState: _, ...cleanDraftState } = draftState as any;
+      stateToSave = {
+        ...cleanDraftState,
+        lastModified: draftState.lastModified || Date.now()
+      };
+    } else {
+      const { draftState: _, ...gameStateWithoutDraft } = gameState;
+      stateToSave = {
+        ...gameStateWithoutDraft,
+        lastModified: Date.now()
+      };
+    }
+    
+    gameState.draftState = stateToSave;
+    this.updateGameState(socketId, gameState);
+    
+    console.log('💾 Complete game state saved:', {
+      gold: stateToSave.gold,
+      pieces: stateToSave.playerTank?.pieces?.length || 0,
+      round: stateToSave.round
+    });
+    
+    return stateToSave;
+  }
+
+  async restoreDraftState(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    const draftState = gameState.draftState;
+    if (!draftState) {
+      console.log('No saved draft state found - returning current state');
+      return gameState;
+    }
+    
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only restore draft during shop phase');
+    }
+    
+    const restoredState: GameState = {
+      ...draftState,
+      playerTank: {
+        ...draftState.playerTank,
+        id: gameState.playerTank.id
+      }
+    };
+    
+    console.log('🔄 Restoring complete game state:', {
+      gold: restoredState.gold,
+      pieces: restoredState.playerTank?.pieces?.length || 0,
+      round: restoredState.round
+    });
+
+    this.updateGameState(socketId, restoredState);
+    return restoredState;
+  }
+
+  async clearDraftState(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    gameState.draftState = null;
+    this.updateGameState(socketId, gameState);
+    
+    console.log('🗑️ Draft state cleared');
+    return gameState;
+  }
+
+  async confirmPlacement(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only confirm placement during shop phase');
+    }
+    
+    // Clear draft state as it's now confirmed
+    gameState.draftState = undefined;
+    
+    this.updateGameState(socketId, gameState);
+    return gameState;
+  }
+
+  async getCalculatedStats(socketId: string): Promise<{ [pieceId: string]: { attack: number; health: number; speed: number } }> {
+    const gameState = await this.getSession(socketId);
+    const result: { [pieceId: string]: { attack: number; health: number; speed: number } } = {};
+    
+    const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
+    
+    placedPieces.forEach(piece => {
+      result[piece.id] = this.calculatePieceStats(piece, placedPieces);
+    });
+    
+    return result;
+  }
+
+  // Private helper methods
+  private updateGameState(socketId: string, gameState: GameState): void {
+    const playerId = this.playerService.getPlayerIdFromSocket(socketId);
+    this.playerService.updateSession(playerId, gameState);
   }
 
   private generateShop(): (GamePiece | null)[] {
@@ -343,7 +440,6 @@ export class GameService {
   }
 
   private getRandomPiece(): GamePiece | null {
-    // Simplified random selection - in production, use rarity weights
     const pieces = [...PIECE_LIBRARY];
     return pieces[Math.floor(Math.random() * pieces.length)] || null;
   }
@@ -391,30 +487,7 @@ export class GameService {
     }
   }
 
-  async toggleShopLock(sessionId: string, shopIndex: number): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
-    
-    if (gameState.phase !== 'shop') {
-      throw new BadRequestException('Can only lock/unlock during shop phase');
-    }
-
-    if (shopIndex < 0 || shopIndex >= gameState.shop.length) {
-      throw new BadRequestException('Invalid shop index');
-    }
-
-    // Toggle lock: if already locked at this index, unlock; otherwise lock at this index
-    if (gameState.lockedShopIndex === shopIndex) {
-      gameState.lockedShopIndex = null; // Unlock
-    } else {
-      gameState.lockedShopIndex = shopIndex; // Lock this slot
-    }
-
-    this.sessions.set(sessionId, gameState);
-    return gameState;
-  }
-
   private simulateBattle(playerTank: Tank, opponentTank: Tank): any {
-    // Simplified battle simulation
     const playerPower = playerTank.pieces.reduce((sum, p) => sum + p.stats.attack + p.stats.health, 0);
     const opponentPower = opponentTank.pieces.reduce((sum, p) => sum + p.stats.attack + p.stats.health, 0);
     
@@ -427,7 +500,6 @@ export class GameService {
     };
   }
 
-  // Calculate piece stats with adjacency bonuses
   private calculatePieceStats(piece: GamePiece, allPieces: GamePiece[]): { attack: number; health: number; speed: number } {
     if (!piece.position) {
       return { attack: piece.stats.attack, health: piece.stats.health, speed: piece.stats.speed };
@@ -437,7 +509,7 @@ export class GameService {
     let healthBonus = 0;
     let speedBonus = 0;
 
-    // Get adjacent positions (8 directions)
+    // Get adjacent positions
     const adjacentPositions = [
       { x: piece.position.x - 1, y: piece.position.y - 1 },
       { x: piece.position.x, y: piece.position.y - 1 },
@@ -487,183 +559,6 @@ export class GameService {
       attack: piece.stats.attack + attackBonus,
       health: piece.stats.health + healthBonus,
       speed: piece.stats.speed + speedBonus
-    };
-  }
-
-  // Get calculated stats for all pieces
-  async getCalculatedStats(sessionId: string): Promise<{ [pieceId: string]: { attack: number; health: number; speed: number } }> {
-    const gameState = await this.getSession(sessionId);
-    const result: { [pieceId: string]: { attack: number; health: number; speed: number } } = {};
-    
-    const placedPieces = gameState.playerTank.pieces.filter(p => p.position);
-    
-    placedPieces.forEach(piece => {
-      result[piece.id] = this.calculatePieceStats(piece, placedPieces);
-    });
-    
-    return result;
-  }
-
-  // Save draft state (called on each action)
-  async saveDraftState(sessionId: string, draftState?: DraftState): Promise<DraftState> {
-    const gameState = await this.getSession(sessionId);
-    
-    // If draftState is provided (from client), use it; otherwise create from current state
-    let stateToSave: DraftState;
-    if (draftState) {
-      // Ensure client-provided draft state doesn't have nested draftState
-      const { draftState: _, ...cleanDraftState } = draftState as any;
-      stateToSave = {
-        ...cleanDraftState,
-        lastModified: draftState.lastModified || Date.now()
-      };
-    } else {
-      // Create from current state, excluding nested draftState
-      const { draftState: _, ...gameStateWithoutDraft } = gameState;
-      stateToSave = {
-        ...gameStateWithoutDraft,
-        lastModified: Date.now()
-      };
-    }
-    
-    gameState.draftState = stateToSave;
-    this.sessions.set(sessionId, gameState);
-    
-    console.log('💾 Complete game state saved:', {
-      gold: stateToSave.gold,
-      pieces: stateToSave.playerTank?.pieces?.length || 0,
-      round: stateToSave.round
-    });
-    
-    return stateToSave;
-  }
-
-  // Restore draft state
-  async restoreDraftState(sessionId: string): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
-    
-    // Get the saved draft state from server storage
-    const draftState = gameState.draftState;
-    if (!draftState) {
-      // No saved state is normal at game start - just return current state
-      console.log('No saved draft state found - returning current state');
-      return gameState;
-    }
-    
-    // Only restore if in shop phase
-    if (gameState.phase !== 'shop') {
-      throw new BadRequestException('Can only restore draft during shop phase');
-    }
-    
-    // Restore the complete game state (but keep current session info)
-    const restoredState: GameState = {
-      ...draftState,
-      // Keep current session identifiers
-      playerTank: {
-        ...draftState.playerTank,
-        id: gameState.playerTank.id  // Keep current session ID
-      }
-    };
-    
-    console.log('🔄 Restoring complete game state:', {
-      gold: restoredState.gold,
-      pieces: restoredState.playerTank?.pieces?.length || 0,
-      round: restoredState.round
-    });
-
-    this.sessions.set(sessionId, restoredState);
-    return restoredState;
-  }
-
-  // Confirm placement and lock in state
-  async confirmPlacement(sessionId: string): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
-    
-    if (gameState.phase !== 'shop') {
-      throw new BadRequestException('Can only confirm placement during shop phase');
-    }
-    
-    // Clear draft state as it's now confirmed
-    gameState.draftState = undefined;
-    
-    this.sessions.set(sessionId, gameState);
-    return gameState;
-  }
-
-  // Clear draft state
-  async clearDraftState(sessionId: string): Promise<GameState> {
-    const gameState = await this.getSession(sessionId);
-    
-    // Clear the stored draft state
-    gameState.draftState = null;
-    this.sessions.set(sessionId, gameState);
-    
-    console.log('🗑️ Draft state cleared for session:', sessionId);
-    return gameState;
-  }
-
-  // Debug methods
-  getAllSessions() {
-    const sessions = [];
-    for (const [playerId, gameState] of this.sessions.entries()) {
-      // Find active socket IDs for this player
-      const socketIds = [];
-      for (const [socketId, pId] of this.socketToPlayer.entries()) {
-        if (pId === playerId) {
-          socketIds.push(socketId);
-        }
-      }
-      
-      sessions.push({
-        playerId,
-        socketIds,
-        gold: gameState.gold,
-        round: gameState.round,
-        pieces: gameState.playerTank.pieces.length,
-        hasDraftState: !!gameState.draftState,
-        draftStateLastModified: gameState.draftState?.lastModified ? new Date(gameState.draftState.lastModified).toISOString() : null
-      });
-    }
-    return sessions;
-  }
-
-  getSessionDebug(sessionId: string) {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return { error: 'Session not found' };
-    }
-    
-    return {
-      sessionId,
-      gameState: session,
-      draftState: session.draftState ? {
-        gold: session.draftState.gold,
-        round: session.draftState.round,
-        pieces: session.draftState.playerTank?.pieces?.length || 0,
-        lastModified: new Date(session.draftState.lastModified).toISOString(),
-        fullDraftState: session.draftState
-      } : null
-    };
-  }
-
-  /**
-   * Clear all game sessions (for debugging/testing)
-   * This will remove all player sessions and socket mappings
-   */
-  clearAllSessions() {
-    const sessionCount = this.sessions.size;
-    const socketCount = this.socketToPlayer.size;
-    
-    // Clear all sessions
-    this.sessions.clear();
-    this.socketToPlayer.clear();
-    
-    console.log(`🗑️ Cleared ${sessionCount} game sessions and ${socketCount} socket mappings`);
-    
-    return {
-      message: `Cleared ${sessionCount} sessions`,
-      clearedCount: sessionCount,
-      socketMappingsCleared: socketCount
     };
   }
 }
