@@ -1,66 +1,102 @@
-# 🐠 Aquarium Autobattler - Modern Full-Stack Rebuild
+# 🐠 Aquarium Autobattler
 
-A modern, scalable rebuild of the Aquarium Autobattler game using Next.js, NestJS, and WebSockets.
+A modern, scalable auto-battler game built with Next.js, NestJS, and WebSockets. Create your dream aquarium tank, strategically place aquatic creatures, and battle opponents in turn-based combat!
+
+## ✨ Features
+
+- 🎮 **Real-time Gameplay** - WebSocket-powered multiplayer experience
+- 🐠 **Strategic Placement** - 8×6 grid-based tank management
+- 💰 **Gold Economy** - Shop, buy, sell, and manage resources
+- 🌊 **Water Mechanics** - Quality and temperature affect performance  
+- 🔄 **Session Persistence** - Your progress saves across page refreshes
+- 🛠️ **Modular Architecture** - Clean, scalable codebase structure
 
 ## 🏗️ Architecture
 
-This project follows a microservices architecture with an Nx monorepo:
+This is an Nx monorepo with a modular architecture designed for scalability:
 
 ```
-/workspace
-├─ apps/
-│   ├─ frontend/             # Next.js + React + Tailwind
-│   └─ game-engine/          # NestJS microservice for game logic
-├─ libs/
-│   └─ shared-types/         # Shared TypeScript interfaces
-└─ tools/                    # Nx configurations
+aquarium-autobattler-nx/
+├── frontend/                # Next.js React application
+├── game-engine/            # NestJS backend with modular structure
+│   ├── src/player/         # Player session management
+│   ├── src/game/           # Game logic and mechanics
+│   ├── src/debug/          # Debug and admin tools
+│   └── src/app/            # Main application module
+├── libs/shared-types/      # Shared TypeScript interfaces
+└── tools/                  # Build and configuration
 ```
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
-
 - Node.js 18+
-- npm
+- npm or yarn
 
-### Installation
+### Installation & Running
 
-1. Install dependencies:
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Start development (easy mode):**
+   ```bash
+   # Windows PowerShell
+   ./start.ps1
+   
+   # Or manually start both services
+   npm run dev
+   ```
+
+3. **Open your browser:**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:3001/api
+   - Debug Panel: http://localhost:3001/api/debug/sessions
+
+### Quick Commands
+
 ```bash
-npm install
+# Development
+npm run dev                    # Start both frontend and backend
+npm run start:frontend        # Frontend only (Next.js)
+npm run start:backend         # Backend only (NestJS)
+
+# Building  
+npm run build:all             # Build everything
+npm run build:shared          # Build shared types
+
+# Utilities
+./stop.ps1                    # Stop all services (Windows)
+npm run lint                  # Run linting
 ```
 
-2. Start the development servers:
+## 🎮 How to Play
 
-```bash
-# Start the game engine (backend)
-npx nx serve game-engine
+1. **Buy Pieces** - Spend gold to purchase fish, plants, and equipment from the shop
+2. **Build Your Tank** - Drag pieces onto the 8×6 grid to create strategic formations
+3. **Manage Resources** - Earn interest on saved gold, reroll shop for better pieces
+4. **Battle & Progress** - Fight opponents, earn rewards, advance through rounds
+5. **Save Progress** - Click "Confirm Placement & Prepare for Battle" to save your state
 
-# Start the frontend (in another terminal)
-npx nx serve frontend
-```
+### Game Mechanics
 
-The frontend will be available at `http://localhost:3000` and the game engine at `http://localhost:3001`.
+- 🏪 **Shop System** - 6 rotating pieces, 2g reroll cost, lock favorite pieces
+- 💰 **Economy** - Earn interest (1g per 10g held, max 5g), sell for 50% value
+- 🐠 **Piece Types** - Fish (attackers), Plants (buffs), Equipment (utility), Consumables (one-time boosts)
+- 🎯 **Strategy** - Adjacency bonuses, schooling synergies, water quality effects
+- 📊 **Persistence** - Server-side session storage survives page refreshes
 
-## 🎮 Game Features
+## 📁 Project Structure
 
-### Current Implementation
-- ✅ Shop system with gold economy
-- ✅ 8×6 grid-based tank placement
-- ✅ Real-time WebSocket communication
-- ✅ Piece types: Fish, Plants, Equipment, Consumables
-- ✅ Round-based gameplay (15 rounds)
-- ✅ Water quality mechanics
-- ✅ Interest system (1g per 10g held, max 5g)
-- ✅ Loss streak tracking
+Each major component has its own README with detailed information:
 
-### Planned Features
-- [ ] Battle animation system
-- [ ] AI opponent strategies
-- [ ] Piece synergies and abilities
-- [ ] Campaign progression
-- [ ] Player authentication
-- [ ] Leaderboards
+- [`frontend/`](./frontend/README.md) - Next.js React frontend application
+- [`game-engine/`](./game-engine/README.md) - NestJS backend with modular architecture
+  - [`src/player/`](./game-engine/src/player/README.md) - Player session management
+  - [`src/game/`](./game-engine/src/game/README.md) - Core game logic and mechanics  
+  - [`src/debug/`](./game-engine/src/debug/README.md) - Debug tools and admin panel
+- [`libs/shared-types/`](./libs/shared-types/README.md) - Shared TypeScript interfaces
 
 ## 🔧 Development
 
