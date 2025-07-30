@@ -151,9 +151,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.BATTLE_START)
-  async handleBattleStart(@ConnectedSocket() client: Socket) {
+  async handleLegacyBattleStart(@ConnectedSocket() client: Socket) {
     try {
-      const result = await this.gameService.startBattle(client.id);
+      // This is the legacy battle system - only generates events, no rewards
+      const result = await this.gameService.simulateBattleEvents(client.id);
       
       // Emit battle events as they happen
       for (const event of result.events) {
@@ -161,18 +162,27 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         await new Promise(resolve => setTimeout(resolve, 500)); // Delay for animation
       }
       
-      // Emit final result
+      // Emit final result with no rewards
       client.emit(SOCKET_EVENTS.BATTLE_COMPLETE, {
         result: result.winner,
-        rewards: result.rewards,
+        rewards: { playerGold: 0, playerInterest: 0, opponentGold: 0, opponentInterest: 0 },
       });
-      
-      // Update game state after battle
-      const gameState = await this.gameService.getSession(client.id);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'LEGACY_BATTLE_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage('return:shop')
+  async handleReturnToShop(@ConnectedSocket() client: Socket) {
+    try {
+      const gameState = await this.gameService.returnToShopPhase(client.id);
       client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
     } catch (error) {
       client.emit(SOCKET_EVENTS.ERROR, {
-        code: 'BATTLE_FAILED',
+        code: 'RETURN_TO_SHOP_FAILED',
         message: error.message,
       });
     }
@@ -309,24 +319,31 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // Check if battle is finished
         if (!updatedState.battleState?.active) {
           try {
-            // Only finalize rewards if we have a winner
-            if (updatedState.battleState?.winner) {
+            // Capture winner before any async operations to avoid race conditions
+            const winner = updatedState.battleState?.winner;
+            const events = updatedState.battleState?.events || [];
+            
+            this.logger.log(`🏁 Battle finished. Winner: ${winner}, Active: ${updatedState.battleState?.active}`);
+            
+            // Always finalize rewards for any battle outcome (win/loss/draw)
+            if (winner) {
               const battleRewards = await this.gameService.finalizeBattleRewards(client.id);
               
               client.emit(SOCKET_EVENTS.BATTLE_COMPLETE, {
-                result: updatedState.battleState.winner,
-                events: updatedState.battleState.events,
+                result: winner,
+                events: events,
                 rewards: battleRewards.rewards,
               });
               
-              // Send final game state with updated gold
+              // Send final game state - still in battle phase so user can see results
               const finalGameState = await this.gameService.getSession(client.id);
               client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, finalGameState);
             } else {
-              // Battle ended without a clear winner - just emit completion
+              // This should rarely happen - battle ended without determining outcome
+              this.logger.warn('Battle ended without winner determination');
               client.emit(SOCKET_EVENTS.BATTLE_COMPLETE, {
                 result: 'draw',
-                events: updatedState.battleState?.events || [],
+                events: events,
                 rewards: { playerGold: 0, playerInterest: 0, opponentGold: 0, opponentInterest: 0 },
               });
             }

@@ -188,6 +188,30 @@ export function GameView() {
     }
   }, [gameState, pendingPlacement, placePiece]);
 
+  // Clean up hover states when game state changes to prevent stale tooltip references
+  useEffect(() => {
+    if (hoveredPiece && gameState) {
+      // Check if the hovered piece still exists with the same ID
+      const pieceStillExists = gameState.shop.some(p => p?.id === hoveredPiece.id) ||
+                              gameState.playerTank.pieces.some(p => p.id === hoveredPiece.id);
+      
+      if (!pieceStillExists) {
+        setHoveredPiece(null);
+        setSynergyBonuses([]);
+      }
+    }
+    
+    if (hoveredGridPiece && gameState) {
+      // Check if the hovered grid piece still exists with the same ID
+      const gridPieceStillExists = gameState.playerTank.pieces.some(p => p.id === hoveredGridPiece.id);
+      
+      if (!gridPieceStillExists) {
+        setHoveredGridPiece(null);
+        setSynergyBonuses([]);
+      }
+    }
+  }, [gameState, hoveredPiece, hoveredGridPiece]);
+
   // Track mouse position for tooltip
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -355,8 +379,8 @@ export function GameView() {
                 <div className="mt-2 border-t border-yellow-600 pt-2">
                   <div className="text-yellow-300 font-semibold mb-1">Adjacency Bonuses:</div>
                   <div className="space-y-1">
-                    {synergyBonuses.map((bonus) => (
-                      <div key={bonus} className="bg-yellow-600 text-black text-xs px-2 py-0.5 rounded font-bold">
+                    {synergyBonuses.map((bonus, index) => (
+                      <div key={`${bonus}-${index}`} className="bg-yellow-600 text-black text-xs px-2 py-0.5 rounded font-bold">
                         {bonus}
                       </div>
                     ))}
@@ -436,7 +460,6 @@ export function GameView() {
                 <button
                   className="w-full mt-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition-all"
                   onClick={() => {
-                    confirmPlacement();
                     enterPlacementPhase();
                   }}
                 >
@@ -482,7 +505,10 @@ export function GameView() {
                           key={piece.id}
                           className="bg-yellow-50 rounded-lg p-3 shadow-sm hover:shadow-2xl hover:scale-105 hover:-rotate-1 transition-all duration-300 border-2 border-yellow-300 cursor-grab active:cursor-grabbing transform-gpu"
                           draggable={gameState.phase === 'shop'}
-                          onDragStart={() => handleDragStart(piece)}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('application/json', JSON.stringify(piece));
+                            handleDragStart(piece);
+                          }}
                           onDragEnd={handleDragEnd}
                           onMouseEnter={() => handleTankPieceHover(piece)}
                           onMouseLeave={() => handleTankPieceHover(null)}

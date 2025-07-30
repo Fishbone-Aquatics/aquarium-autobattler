@@ -51,7 +51,7 @@ const getTypeColors = (type: string) => {
 };
 
 export function BattleView({ gameState }: BattleViewProps) {
-  const { startBattle, enterPlacementPhase, enterBattlePhase } = useGame();
+  const { returnToShop, enterPlacementPhase, enterBattlePhase } = useGame();
   const [battleState, setBattleState] = useState<BattleState | null>(gameState.battleState || null);
   const [battleEvents, setBattleEvents] = useState<BattleEvent[]>([]);
 
@@ -118,7 +118,7 @@ export function BattleView({ gameState }: BattleViewProps) {
                 <button
                   onClick={() => {
                     // Return to shop phase for next round
-                    startBattle();
+                    returnToShop();
                   }}
                   className="px-6 py-3 bg-white text-orange-600 font-bold rounded-lg hover:bg-gray-100 transition-all ml-4"
                 >

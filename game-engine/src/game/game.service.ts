@@ -260,11 +260,13 @@ export class GameService {
       throw new BadRequestException('No battle state found');
     }
     
-    if (!gameState.battleState.winner) {
+    // Capture the winner immediately to avoid race conditions
+    const winner = gameState.battleState.winner;
+    if (!winner) {
       throw new BadRequestException('Battle not finished - no winner determined');
     }
     
-    const battleResult = { winner: gameState.battleState.winner };
+    const battleResult = { winner };
     
     // Update win/loss counts
     if (battleResult.winner === 'player') {
@@ -278,14 +280,16 @@ export class GameService {
       gameState.lossStreak++;
       gameState.opponentLossStreak = 0;
     } else if (battleResult.winner === 'draw') {
-      // For draws, no win/loss changes but reset both streaks
+      // For draws, both parties "win" - no losses, reset loss streaks
+      gameState.wins++;
+      gameState.opponentWins++;
       gameState.lossStreak = 0;
       gameState.opponentLossStreak = 0;
     }
 
     // Calculate player rewards
     const playerBaseReward = 5;
-    const playerWinBonus = battleResult.winner === 'player' ? 3 : 0;
+    const playerWinBonus = (battleResult.winner === 'player' || battleResult.winner === 'draw') ? 3 : 0;
     const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
     const playerTotalReward = playerBaseReward + playerWinBonus + playerLossStreakBonus;
 
@@ -295,13 +299,13 @@ export class GameService {
       round: gameState.round,
       type: 'battle_reward',
       amount: playerTotalReward,
-      description: `Battle ${battleResult.winner === 'player' ? 'won' : 'lost'}`,
+      description: `Battle ${battleResult.winner === 'player' ? 'won' : battleResult.winner === 'draw' ? 'tied' : 'lost'}`,
       timestamp: Date.now(),
     });
 
     // Calculate opponent rewards (same mechanics as player)
     const opponentBaseReward = 5;
-    const opponentWinBonus = battleResult.winner === 'opponent' ? 3 : 0;
+    const opponentWinBonus = (battleResult.winner === 'opponent' || battleResult.winner === 'draw') ? 3 : 0;
     const opponentLossStreakBonus = Math.min(gameState.opponentLossStreak, 3);
     const opponentTotalReward = opponentBaseReward + opponentWinBonus + opponentLossStreakBonus;
 
@@ -329,14 +333,15 @@ export class GameService {
 
     // Advance round
     gameState.round++;
-    gameState.phase = 'shop';
+    // Keep the game in battle phase so user can see results and click continue
+    // Phase will be changed to 'shop' when user clicks "Continue to Next Round"
     gameState.rerollsThisRound = 0;
     
-    // Generate new shop
+    // Generate new shop for when they return
     gameState.shop = this.generateShop();
     
-    // Clear battle state
-    gameState.battleState = undefined;
+    // Keep battle state so user can see battle results
+    // battleState will be cleared when user clicks continue
     
     this.updateGameState(socketId, gameState);
 
@@ -351,89 +356,37 @@ export class GameService {
     };
   }
 
-  async startBattle(socketId: string): Promise<any> {
+  async simulateBattleEvents(socketId: string): Promise<any> {
     const gameState = await this.getSession(socketId);
     
-    // Simulate battle (legacy method for non-live battles)
+    // Legacy method - only used for generating battle events for non-live battles  
+    // This method does NOT apply any rewards or update game state
     const battleResult = this.simulateBattle(gameState.playerTank, gameState.opponentTank);
     
-    // Update game state based on result
-    if (battleResult.winner === 'player') {
-      gameState.wins++;
-      gameState.opponentLosses++;
-      gameState.lossStreak = 0;
-      gameState.opponentLossStreak++;
-    } else if (battleResult.winner === 'opponent') {
-      gameState.losses++;
-      gameState.opponentWins++;
-      gameState.lossStreak++;
-      gameState.opponentLossStreak = 0;
-    }
-
-    // Calculate player rewards
-    const playerBaseReward = 5;
-    const playerWinBonus = battleResult.winner === 'player' ? 3 : 0;
-    const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
-    const playerTotalReward = playerBaseReward + playerWinBonus + playerLossStreakBonus;
-
-    gameState.gold += playerTotalReward;
-    gameState.goldHistory.push({
-      id: uuidv4(),
-      round: gameState.round,
-      type: 'battle_reward',
-      amount: playerTotalReward,
-      description: `Battle ${battleResult.winner === 'player' ? 'won' : 'lost'}`,
-      timestamp: Date.now(),
-    });
-
-    // Calculate opponent rewards (same mechanics as player)
-    const opponentBaseReward = 5;
-    const opponentWinBonus = battleResult.winner === 'opponent' ? 3 : 0;
-    const opponentLossStreakBonus = Math.min(gameState.opponentLossStreak, 3);
-    const opponentTotalReward = opponentBaseReward + opponentWinBonus + opponentLossStreakBonus;
-
-    gameState.opponentGold += opponentTotalReward;
-
-    // Player Interest
-    const playerInterest = Math.min(Math.floor(gameState.gold / 10), 5);
-    if (playerInterest > 0) {
-      gameState.gold += playerInterest;
-      gameState.goldHistory.push({
-        id: uuidv4(),
-        round: gameState.round,
-        type: 'interest',
-        amount: playerInterest,
-        description: 'Interest earned',
-        timestamp: Date.now(),
-      });
-    }
-
-    // Opponent Interest (same calculation as player)
-    const opponentInterest = Math.min(Math.floor(gameState.opponentGold / 10), 5);
-    if (opponentInterest > 0) {
-      gameState.opponentGold += opponentInterest;
-    }
-
-    // Advance round
-    gameState.round++;
-    gameState.phase = 'shop';
-    gameState.rerollsThisRound = 0;
-    
-    // Generate new shop
-    gameState.shop = this.generateShop();
-    
-    this.updateGameState(socketId, gameState);
-
     return {
       winner: battleResult.winner,
       events: battleResult.events,
-      rewards: {
-        playerGold: playerTotalReward,
-        playerInterest,
-        opponentGold: opponentTotalReward,
-        opponentInterest,
-      },
     };
+  }
+
+  async returnToShopPhase(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    // Return to shop phase and clear battle results
+    // (Rewards should have already been applied by finalizeBattleRewards)
+    gameState.phase = 'shop';
+    gameState.rerollsThisRound = 0;
+    
+    // Clear battle state now that user has seen results
+    gameState.battleState = undefined;
+    
+    // Shop should already be generated from finalizeBattleRewards, but ensure it exists
+    if (!gameState.shop || gameState.shop.length === 0) {
+      gameState.shop = this.generateShop();
+    }
+    
+    this.updateGameState(socketId, gameState);
+    return gameState;
   }
 
   async saveDraftState(socketId: string, draftState?: DraftState): Promise<DraftState> {
@@ -542,7 +495,8 @@ export class GameService {
     }
 
     // Generate opponent tank for battle comparison
-    const { tank, remainingGold } = this.generateOpponentTankWithGold();
+    // Use current opponent gold (which scales with rounds) instead of fixed 10
+    const { tank, remainingGold } = this.generateOpponentTankWithGold(gameState.opponentGold);
     gameState.opponentTank = tank;
     gameState.opponentGold = remainingGold; // Track remaining gold
     gameState.phase = 'placement';
@@ -805,61 +759,72 @@ export class GameService {
     };
   }
 
-  private generateOpponentTankWithGold(): { tank: Tank; remainingGold: number } {
+  private generateOpponentTankWithGold(startingGold: number = 10): { tank: Tank; remainingGold: number } {
+    console.log(`🤖 Generating opponent tank with ${startingGold} gold`);
+    
     // Generate a simple opponent tank for testing
     const opponentPieces: GamePiece[] = [];
     const grid: (string | null)[][] = Array(6).fill(null).map(() => Array(8).fill(null));
     
-    // Start with similar gold to player
-    let opponentGold = 10;
+    // Use the opponent's actual gold amount
+    let opponentGold = startingGold;
     const maxPieces = 5;
     let pieceCount = 0;
     
-    // Generate pieces within budget
-    while (opponentGold > 0 && pieceCount < maxPieces) {
+    // Generate pieces within budget with safety limits
+    let consecutiveFailures = 0;
+    const maxConsecutiveFailures = 10;
+    
+    while (opponentGold > 0 && pieceCount < maxPieces && consecutiveFailures < maxConsecutiveFailures) {
       const piece = this.getRandomPiece();
-      if (piece && piece.cost <= opponentGold) {
-        // Find a valid position for the piece
-        let placed = false;
-        let attempts = 0;
-        while (!placed && attempts < 50) {
-          const position = { 
-            x: Math.floor(Math.random() * 8), 
-            y: Math.floor(Math.random() * 6) 
-          };
-          
-          // Check if position is valid for this piece
-          if (this.isValidPositionForGrid(grid, piece, position)) {
-            const opponentPiece = { 
-              ...piece, 
-              id: uuidv4(),
-              position
-            };
-            
-            // Place piece on grid
-            for (const offset of piece.shape) {
-              const x = position.x + offset.x;
-              const y = position.y + offset.y;
-              if (x >= 0 && x < 8 && y >= 0 && y < 6) {
-                grid[y][x] = opponentPiece.id;
-              }
-            }
-            
-            opponentPieces.push(opponentPiece);
-            opponentGold -= piece.cost;
-            pieceCount++;
-            placed = true;
-          }
-          attempts++;
-        }
+      
+      if (!piece || piece.cost > opponentGold) {
+        consecutiveFailures++;
+        continue;
       }
       
-      // If we've tried too many times without finding affordable pieces, stop
-      if (opponentGold > 0 && pieceCount === 0) {
-        break;
+      // Find a valid position for the piece
+      let placed = false;
+      let attempts = 0;
+      while (!placed && attempts < 50) {
+        const position = { 
+          x: Math.floor(Math.random() * 8), 
+          y: Math.floor(Math.random() * 6) 
+        };
+        
+        // Check if position is valid for this piece
+        if (this.isValidPositionForGrid(grid, piece, position)) {
+          const opponentPiece = { 
+            ...piece, 
+            id: uuidv4(),
+            position
+          };
+          
+          // Place piece on grid
+          for (const offset of piece.shape) {
+            const x = position.x + offset.x;
+            const y = position.y + offset.y;
+            if (x >= 0 && x < 8 && y >= 0 && y < 6) {
+              grid[y][x] = opponentPiece.id;
+            }
+          }
+          
+          opponentPieces.push(opponentPiece);
+          opponentGold -= piece.cost;
+          pieceCount++;
+          placed = true;
+          consecutiveFailures = 0; // Reset failure counter on success
+        }
+        attempts++;
+      }
+      
+      if (!placed) {
+        consecutiveFailures++;
       }
     }
 
+    console.log(`🤖 Opponent tank generated: ${pieceCount} pieces, ${opponentGold} gold remaining`);
+    
     const tank = {
       id: 'opponent',
       pieces: opponentPieces,

@@ -21,6 +21,7 @@ interface GameContextType {
   movePiece: (pieceId: string, position: Position) => void;
   rerollShop: () => void;
   startBattle: () => void;
+  returnToShop: () => void;
   toggleShopLock: (index: number) => void;
   
   // Phase transitions
@@ -101,14 +102,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const newSessionId = state.playerTank.id;
         setSessionId(newSessionId);
         
-        // Auto-restore draft state from server on page refresh (only once per component mount)
-        if (!hasAttemptedRestore.current) {
-          hasAttemptedRestore.current = true;
-          setTimeout(() => {
-            console.log('🔄 Requesting draft state restore from server');
-            socketInstance.emit(SOCKET_EVENTS.RESTORE_DRAFT_STATE);
-          }, 1000); // Small delay to ensure connection is stable
-        }
+        // No need to restore draft state - game state is already persistent
+        // The server automatically maintains the current game state per player
       }
       
       // Request updated stats after game state changes
@@ -292,10 +287,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const startBattle = () => {
     if (!socket || !connected || !gameState) return;
     
+    // Legacy battle start - only used for non-live battles (generates events only, no rewards)
     socket.emit(SOCKET_EVENTS.BATTLE_START, {
       sessionId: gameState.playerTank.id,
       playerId: gameState.playerTank.id,
     });
+  };
+
+  const returnToShop = () => {
+    if (!socket || !connected) return;
+    
+    // Return to shop phase after battle completion
+    socket.emit('return:shop');
   };
 
   const toggleShopLock = (index: number) => {
@@ -393,6 +396,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       movePiece,
       rerollShop,
       startBattle,
+      returnToShop,
       toggleShopLock,
       enterPlacementPhase,
       enterBattlePhase,

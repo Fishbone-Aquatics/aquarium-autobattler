@@ -60,6 +60,82 @@ export class DebugService {
   }
 
   /**
+   * Delete a specific player session
+   */
+  deletePlayerSession(playerId: string) {
+    const existed = this.playerService.deleteSession(playerId);
+    
+    if (existed) {
+      return {
+        message: `Deleted session for player: ${playerId}`,
+        playerId,
+        success: true
+      };
+    } else {
+      return {
+        message: `Session not found for player: ${playerId}`,
+        playerId,
+        success: false
+      };
+    }
+  }
+
+  /**
+   * Create or reset a player session
+   */
+  createPlayerSession(playerId: string) {
+    // Create initial game state
+    const initialState = {
+      phase: 'shop' as const,
+      round: 1,
+      gold: 10,
+      lossStreak: 0,
+      opponentLossStreak: 0,
+      wins: 0,
+      losses: 0,
+      opponentWins: 0,
+      opponentLosses: 0,
+      playerTank: {
+        id: playerId,
+        pieces: [],
+        waterQuality: 5,
+        temperature: 25,
+        grid: Array(6).fill(null).map(() => Array(8).fill(null)),
+      },
+      opponentTank: {
+        id: 'opponent',
+        pieces: [],
+        waterQuality: 5,
+        temperature: 25,
+        grid: Array(6).fill(null).map(() => Array(8).fill(null)),
+      },
+      shop: [],
+      battleEvents: [],
+      selectedPiece: null,
+      opponentGold: 10,
+      lockedShopIndex: null,
+      goldHistory: [{
+        id: `${Date.now()}-${Math.random()}`,
+        round: 1,
+        type: 'round_start' as const,
+        amount: 10,
+        description: 'Starting gold',
+        timestamp: Date.now(),
+      }],
+      rerollsThisRound: 0,
+    };
+    
+    const session = this.playerService.createOrResetSession(playerId, initialState);
+    
+    return {
+      message: `Created/reset session for player: ${playerId}`,
+      playerId,
+      gameState: session,
+      success: true
+    };
+  }
+
+  /**
    * Clear all sessions for debugging
    */
   clearAllSessions() {
