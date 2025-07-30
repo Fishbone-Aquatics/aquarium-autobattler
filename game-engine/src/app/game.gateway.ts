@@ -193,11 +193,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.SAVE_DRAFT_STATE)
-  async handleSaveDraftState(@ConnectedSocket() client: Socket) {
+  async handleSaveDraftState(
+    @MessageBody() data: { draftState: any },
+    @ConnectedSocket() client: Socket,
+  ) {
     try {
-      const draftState = await this.gameService.saveDraftState(client.id);
+      await this.gameService.saveDraftState(client.id, data.draftState);
       
-      client.emit(SOCKET_EVENTS.DRAFT_STATE_SAVED, draftState);
+      client.emit(SOCKET_EVENTS.DRAFT_STATE_SAVED, data.draftState);
     } catch (error) {
       client.emit(SOCKET_EVENTS.ERROR, {
         code: 'DRAFT_SAVE_FAILED',
@@ -207,12 +210,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.RESTORE_DRAFT_STATE)
-  async handleRestoreDraftState(
-    @MessageBody() data: { draftState: any },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleRestoreDraftState(@ConnectedSocket() client: Socket) {
     try {
-      const gameState = await this.gameService.restoreDraftState(client.id, data.draftState);
+      const gameState = await this.gameService.restoreDraftState(client.id);
       
       client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
     } catch (error) {
@@ -232,6 +232,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       client.emit(SOCKET_EVENTS.ERROR, {
         code: 'PLACEMENT_CONFIRMATION_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage('draft:clear')
+  async handleClearDraftState(@ConnectedSocket() client: Socket) {
+    try {
+      const gameState = await this.gameService.clearDraftState(client.id);
+      
+      client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'DRAFT_CLEAR_FAILED',
         message: error.message,
       });
     }

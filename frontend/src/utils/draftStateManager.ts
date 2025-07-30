@@ -3,7 +3,7 @@ import { DraftState } from '@aquarium/shared-types';
 export class DraftStateManager {
   private static readonly STORAGE_KEY = 'aquarium_draft_state';
   private static readonly COOKIE_NAME = 'aquarium_draft';
-  private static readonly EXPIRES_HOURS = 24;
+  private static readonly EXPIRES_HOURS = 87600; // 10 years
 
   // Save draft state to both localStorage and cookies for redundancy
   static saveDraftState(sessionId: string, draftState: DraftState): void {

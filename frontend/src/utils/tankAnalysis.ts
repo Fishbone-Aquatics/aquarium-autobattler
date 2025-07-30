@@ -134,8 +134,8 @@ const calculateAdjacencyBonuses = (targetPiece: GamePiece, allPieces: GamePiece[
   if (targetPiece.tags.includes('schooling')) {
     const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
     
-    const schoolingBonus = SCHOOLING_BONUSES[targetPiece.name];
-    if (schoolingBonus && adjacentSchoolingCount > 0) {
+    const schoolingBonus = SCHOOLING_BONUSES[targetPiece.name as keyof typeof SCHOOLING_BONUSES];
+    if (schoolingBonus && typeof schoolingBonus === 'object' && 'attackPerSchooling' in schoolingBonus && adjacentSchoolingCount > 0) {
       const attackGain = adjacentSchoolingCount * schoolingBonus.attackPerSchooling;
       attackBonus += attackGain;
       bonuses.push({ 

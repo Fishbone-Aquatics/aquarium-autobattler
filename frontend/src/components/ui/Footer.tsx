@@ -9,7 +9,13 @@ interface FooterProps {
 }
 
 export function Footer({ phase, waterQuality }: FooterProps) {
-  const { hasDraftState, draftStateAge, clearDraftState, restoreDraftState } = useGame();
+  const { hasDraftState, draftStateAge, clearDraftState, restoreDraftState, getStoredDraftData, gameState } = useGame();
+  const [showDetails, setShowDetails] = React.useState(false);
+  
+  const storedData = getStoredDraftData();
+  
+  // Get player ID from localStorage
+  const playerId = typeof window !== 'undefined' ? localStorage.getItem('aquarium-player-id') : null;
   
   return (
     <footer className="bg-white border-t border-gray-200 mt-12">
@@ -18,12 +24,15 @@ export function Footer({ phase, waterQuality }: FooterProps) {
           <div className="flex items-center gap-4">
             <p>Build your dream aquarium and dominate the competition!</p>
             
-            {/* Draft State Controls */}
-            {hasDraftState && (
+            {/* Stored Draft State Info */}
+            {storedData && (
               <div className="flex items-center gap-2 ml-4">
-                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                  💾 Draft saved{draftStateAge !== null ? ` ${draftStateAge}m ago` : ''}
-                </span>
+                <button
+                  onClick={() => setShowDetails(!showDetails)}
+                  className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                >
+                  💾 Saved: Round {storedData.round} | {storedData.gold}g | {storedData.pieceCount} pieces
+                </button>
                 <button
                   onClick={restoreDraftState}
                   className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200 transition-colors"
@@ -40,11 +49,71 @@ export function Footer({ phase, waterQuality }: FooterProps) {
             )}
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <span className="text-xs">Phase: <strong className="capitalize">{phase}</strong></span>
             <span className="text-xs">Tank Health: <strong>{waterQuality}/10</strong></span>
+            
+            {/* Player Session Info */}
+            {playerId && (
+              <div className="relative group">
+                <a
+                  href={`http://localhost:3001/api/debug/session/${playerId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-200 transition-colors inline-block"
+                  title={`Click to view session details`}
+                >
+                  👤 {playerId}
+                </a>
+                
+                {/* Hover tooltip */}
+                <div className="absolute bottom-full right-0 mb-2 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                  <div className="font-semibold mb-1">Current Session</div>
+                  <div>Gold: {gameState?.gold || 0}</div>
+                  <div>Round: {gameState?.round || 1}</div>
+                  <div>Pieces: {gameState?.playerTank?.pieces?.length || 0}</div>
+                  <div className="mt-1 text-gray-400 text-xs">Click to view full session data</div>
+                </div>
+              </div>
+            )}
+            
+            {/* Debug: Clear player ID */}
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('aquarium-player-id');
+                  window.location.reload();
+                }}
+                className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded hover:bg-purple-200 transition-colors"
+                title="Clear persistent player ID and reload"
+              >
+                🔄 New Player ID
+              </button>
+            )}
           </div>
         </div>
+        
+        {/* Detailed View */}
+        {showDetails && storedData && (
+          <div className="border-t border-gray-200 mt-4 pt-4">
+            <div className="text-xs text-gray-500">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <strong>Last Modified:</strong> {storedData.lastModified}
+                </div>
+                <div>
+                  <strong>Pieces:</strong> {storedData.pieceCount} total, {storedData.placedPieces} placed
+                </div>
+              </div>
+              <div className="mt-2">
+                <strong>Gold:</strong> {storedData.gold} | <strong>Round:</strong> {storedData.round}
+              </div>
+              <div className="mt-1">
+                <strong>Piece Names:</strong> {storedData.gameState.playerTank?.pieces?.map((p: any) => p.name).join(', ') || 'None'}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </footer>
   );

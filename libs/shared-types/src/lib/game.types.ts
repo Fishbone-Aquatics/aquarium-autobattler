@@ -44,9 +44,7 @@ export interface BattleEvent {
 
 export type BattleResult = 'player' | 'opponent' | 'draw';
 
-export interface DraftState {
-  pieces: GamePiece[];
-  grid: (string | null)[][];
+export interface DraftState extends Omit<GameState, 'draftState'> {
   lastModified: number;
 }
 

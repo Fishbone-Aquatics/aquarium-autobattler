@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { GameState, GamePiece, Position, BattleResult, DraftState } from '@aquarium/shared-types';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@aquarium/shared-types';
@@ -28,6 +28,7 @@ interface GameContextType {
   restoreDraftState: () => void;
   clearDraftState: () => void;
   confirmPlacement: () => void;
+  getStoredDraftData: () => any;
   requestStatCalculation: () => void;
 }
 
@@ -41,6 +42,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [hasDraftState, setHasDraftState] = useState(false);
   const [draftStateAge, setDraftStateAge] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const hasAttemptedRestore = useRef(false);
+  
+  // Get or create persistent player ID
+  const getOrCreatePlayerId = () => {
+    const PLAYER_ID_KEY = 'aquarium-player-id';
+    let playerId = localStorage.getItem(PLAYER_ID_KEY);
+    if (!playerId) {
+      playerId = 'player-' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem(PLAYER_ID_KEY, playerId);
+      console.log('🆕 Created new persistent player ID:', playerId);
+    } else {
+      console.log('♻️ Using existing player ID:', playerId);
+    }
+    return playerId;
+  };
 
   useEffect(() => {
     // Initialize socket connection
@@ -52,9 +68,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.log('Connected to game server');
       setConnected(true);
       
-      // Initialize session
+      // Initialize session with persistent player ID
+      const playerId = getOrCreatePlayerId();
       socketInstance.emit(SOCKET_EVENTS.SESSION_INIT, {
-        playerId: 'player-' + Math.random().toString(36).substr(2, 9),
+        playerId: playerId,
       });
     });
 
@@ -77,7 +94,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       
       // Update session ID for draft state management
       if (!sessionId) {
-        setSessionId(state.playerTank.id);
+        const newSessionId = state.playerTank.id;
+        setSessionId(newSessionId);
+        
+        // Auto-restore draft state from server on page refresh (only once per component mount)
+        if (!hasAttemptedRestore.current) {
+          hasAttemptedRestore.current = true;
+          setTimeout(() => {
+            console.log('🔄 Requesting draft state restore from server');
+            socketInstance.emit(SOCKET_EVENTS.RESTORE_DRAFT_STATE);
+          }, 1000); // Small delay to ensure connection is stable
+        }
       }
       
       // Request updated stats after game state changes
@@ -97,6 +124,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Handle draft state events
     socketInstance.on(SOCKET_EVENTS.DRAFT_STATE_SAVED, (draftState: DraftState) => {
       console.log('💾 DRAFT STATE SAVED:', draftState);
+      
+      // Update the current game state to include the saved draft state
+      setGameState(prevState => {
+        if (!prevState) return prevState;
+        return {
+          ...prevState,
+          draftState: draftState
+        };
+      });
+      
       if (sessionId) {
         DraftStateManager.saveDraftState(sessionId, draftState);
         updateDraftStateStatus();
@@ -216,25 +253,44 @@ export function GameProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreDraftState = () => {
-    if (!socket || !connected || !sessionId) return;
+    if (!socket || !connected) return;
     
-    const draftState = DraftStateManager.loadDraftState(sessionId);
-    if (draftState) {
-      socket.emit(SOCKET_EVENTS.RESTORE_DRAFT_STATE, { draftState });
-    }
+    console.log('🔄 Manually requesting draft state restore from server');
+    socket.emit(SOCKET_EVENTS.RESTORE_DRAFT_STATE);
   };
 
   const clearDraftState = () => {
-    DraftStateManager.clearDraftState();
-    updateDraftStateStatus();
+    if (!socket || !connected) return;
+    
+    // Clear on server side
+    socket.emit('draft:clear');
+    console.log('🗑️ Clearing draft state on server');
+  };
+
+  const getStoredDraftData = () => {
+    if (!gameState?.draftState) return null;
+    return {
+      gameState: gameState.draftState,
+      lastModified: new Date(gameState.draftState.lastModified).toLocaleString(),
+      pieceCount: gameState.draftState.playerTank?.pieces?.length || 0,
+      placedPieces: gameState.draftState.playerTank?.pieces?.filter(p => p.position)?.length || 0,
+      gold: gameState.draftState.gold || 0,
+      round: gameState.draftState.round || 1
+    };
   };
 
   const confirmPlacement = () => {
-    if (!socket || !connected) return;
-    socket.emit(SOCKET_EVENTS.CONFIRM_PLACEMENT);
-    // Clear draft state after confirmation
-    DraftStateManager.clearDraftState();
-    updateDraftStateStatus();
+    if (!socket || !connected || !gameState) return;
+    
+    // Save entire game state snapshot to server (excluding nested draftState)
+    const { draftState: _, ...gameStateWithoutDraft } = gameState;
+    const draftState = {
+      ...gameStateWithoutDraft,
+      lastModified: Date.now()
+    };
+    
+    socket.emit(SOCKET_EVENTS.SAVE_DRAFT_STATE, { draftState });
+    console.log('✅ Complete game state saved to server');
   };
 
   const requestStatCalculation = () => {
@@ -261,6 +317,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       restoreDraftState,
       clearDraftState,
       confirmPlacement,
+      getStoredDraftData,
       requestStatCalculation,
     }}>
       {children}

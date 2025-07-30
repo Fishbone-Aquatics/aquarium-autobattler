@@ -285,9 +285,9 @@ export function TankGrid({
                               // Schooling fish bonuses
                               if (piece.tags.includes('schooling')) {
                                 const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
-                                const schoolingBonus = SCHOOLING_BONUSES[piece.name];
+                                const schoolingBonus = SCHOOLING_BONUSES[piece.name as keyof typeof SCHOOLING_BONUSES];
                                 
-                                if (schoolingBonus && adjacentSchoolingCount > 0) {
+                                if (schoolingBonus && typeof schoolingBonus === 'object' && 'attackPerSchooling' in schoolingBonus && adjacentSchoolingCount > 0) {
                                   attackBonus += adjacentSchoolingCount * schoolingBonus.attackPerSchooling;
                                 }
                               }

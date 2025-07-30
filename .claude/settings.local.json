@@ -5,7 +5,9 @@
       "Bash(start.bat)",
       "Bash(cmd:*)",
       "Bash(npm install:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(npm run:*)",
+      "Bash(.start.ps1)"
     ],
     "deny": []
   }

@@ -433,7 +433,7 @@ export function GameView() {
                     confirmPlacement();
                   }}
                 >
-                  Confirm Placement & Battle Prep →
+                  Confirm Placement & Prepare for Battle
                 </button>
               )}
             </div>
