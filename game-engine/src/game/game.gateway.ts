@@ -250,4 +250,106 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+
+  @SubscribeMessage(SOCKET_EVENTS.ENTER_PLACEMENT_PHASE)
+  async handleEnterPlacementPhase(@ConnectedSocket() client: Socket) {
+    try {
+      const gameState = await this.gameService.enterPlacementPhase(client.id);
+      
+      client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
+      client.emit(SOCKET_EVENTS.PHASE_CHANGED, { phase: 'placement' });
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'PHASE_TRANSITION_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  @SubscribeMessage(SOCKET_EVENTS.ENTER_BATTLE_PHASE)
+  async handleEnterBattlePhase(@ConnectedSocket() client: Socket) {
+    try {
+      const gameState = await this.gameService.enterBattlePhase(client.id);
+      
+      client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, gameState);
+      // Don't emit phase change - stay on placement screen
+      
+      // Start battle simulation with real-time updates
+      this.runLiveBattleSimulation(client);
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'PHASE_TRANSITION_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  private async runLiveBattleSimulation(client: Socket) {
+    try {
+      let gameState = await this.gameService.getSession(client.id);
+      if (!gameState.battleState || !gameState.battleState.active) {
+        return;
+      }
+
+      // Run battle simulation with delays for real-time effect
+      while (gameState.battleState.active) {
+        // Advance one turn
+        const { gameState: updatedState, turnEvents } = await this.gameService.advanceBattleTurn(client.id);
+        gameState = updatedState; // Update our local reference
+        
+        // Emit each event with a delay
+        for (const event of turnEvents) {
+          client.emit(SOCKET_EVENTS.BATTLE_STEP, event);
+          await new Promise(resolve => setTimeout(resolve, 800)); // 800ms between events
+        }
+        
+        // Update client with latest state
+        client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, updatedState);
+        
+        // Check if battle is finished
+        if (!updatedState.battleState?.active) {
+          try {
+            // Only finalize rewards if we have a winner
+            if (updatedState.battleState?.winner) {
+              const battleRewards = await this.gameService.finalizeBattleRewards(client.id);
+              
+              client.emit(SOCKET_EVENTS.BATTLE_COMPLETE, {
+                result: updatedState.battleState.winner,
+                events: updatedState.battleState.events,
+                rewards: battleRewards.rewards,
+              });
+              
+              // Send final game state with updated gold
+              const finalGameState = await this.gameService.getSession(client.id);
+              client.emit(SOCKET_EVENTS.GAME_STATE_UPDATE, finalGameState);
+            } else {
+              // Battle ended without a clear winner - just emit completion
+              client.emit(SOCKET_EVENTS.BATTLE_COMPLETE, {
+                result: 'draw',
+                events: updatedState.battleState?.events || [],
+                rewards: { playerGold: 0, playerInterest: 0, opponentGold: 0, opponentInterest: 0 },
+              });
+            }
+          } catch (error) {
+            this.logger.error('Error finalizing battle rewards:', error.message);
+            client.emit(SOCKET_EVENTS.ERROR, {
+              code: 'BATTLE_FINALIZATION_FAILED',
+              message: 'Failed to finalize battle rewards',
+              details: error.message,
+            });
+          }
+          break;
+        }
+        
+        // Wait before next turn
+        await new Promise(resolve => setTimeout(resolve, 1200));
+      }
+    } catch (error) {
+      client.emit(SOCKET_EVENTS.ERROR, {
+        code: 'BATTLE_SIMULATION_FAILED',
+        message: 'Battle simulation encountered an error',
+        details: error.message,
+      });
+    }
+  }
 }

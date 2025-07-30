@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import { GameState, GamePiece, Position, BattleResult, DraftState } from '@aquarium/shared-types';
+import { GameState, GamePiece, Position, BattleResult, DraftState, BattleEvent } from '@aquarium/shared-types';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@aquarium/shared-types';
 import { DraftStateManager } from '../utils/draftStateManager';
@@ -22,6 +22,10 @@ interface GameContextType {
   rerollShop: () => void;
   startBattle: () => void;
   toggleShopLock: (index: number) => void;
+  
+  // Phase transitions
+  enterPlacementPhase: () => void;
+  enterBattlePhase: () => void;
   
   // Draft state management
   saveDraftState: () => void;
@@ -138,6 +142,64 @@ export function GameProvider({ children }: { children: ReactNode }) {
         DraftStateManager.saveDraftState(sessionId, draftState);
         updateDraftStateStatus();
       }
+    });
+
+    // Handle battle events
+    socketInstance.on(SOCKET_EVENTS.BATTLE_STEP, (event: any) => {
+      console.log('⚔️ BATTLE STEP:', {
+        type: event.type,
+        description: event.description,
+        round: event.round,
+        turn: event.turn,
+        value: event.value,
+        source: event.sourceName,
+        target: event.targetName
+      });
+      
+      // Update game state to reflect the battle event
+      setGameState(prevState => {
+        if (!prevState || !prevState.battleState) return prevState;
+        
+        const updatedBattleState = {
+          ...prevState.battleState,
+          events: [...prevState.battleState.events, event],
+        };
+        
+        return {
+          ...prevState,
+          battleState: updatedBattleState,
+        };
+      });
+    });
+
+    socketInstance.on(SOCKET_EVENTS.BATTLE_COMPLETE, (result: any) => {
+      console.log('🏁 BATTLE COMPLETE:', {
+        winner: result.result,
+        playerRewards: result.rewards?.playerGold,
+        opponentRewards: result.rewards?.opponentGold,
+        playerInterest: result.rewards?.playerInterest,
+        opponentInterest: result.rewards?.opponentInterest
+      });
+      
+      // Update game state with final battle result
+      setGameState(prevState => {
+        if (!prevState || !prevState.battleState) return prevState;
+        
+        const updatedBattleState = {
+          ...prevState.battleState,
+          active: false,
+          winner: result.result,
+        };
+        
+        return {
+          ...prevState,
+          battleState: updatedBattleState,
+        };
+      });
+    });
+
+    socketInstance.on(SOCKET_EVENTS.PHASE_CHANGED, (data: { phase: string }) => {
+      console.log('🔄 PHASE CHANGED:', data.phase);
     });
 
     setSocket(socketInstance);
@@ -298,6 +360,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit(SOCKET_EVENTS.GET_CALCULATED_STATS);
   };
 
+  // Phase transition functions
+  const enterPlacementPhase = () => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.ENTER_PLACEMENT_PHASE, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+    });
+  };
+
+  const enterBattlePhase = () => {
+    if (!socket || !connected || !gameState) return;
+    
+    socket.emit(SOCKET_EVENTS.ENTER_BATTLE_PHASE, {
+      sessionId: gameState.playerTank.id,
+      playerId: gameState.playerTank.id,
+    });
+  };
+
   return (
     <GameContext.Provider value={{
       gameState,
@@ -313,6 +394,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       rerollShop,
       startBattle,
       toggleShopLock,
+      enterPlacementPhase,
+      enterBattlePhase,
       saveDraftState,
       restoreDraftState,
       clearDraftState,

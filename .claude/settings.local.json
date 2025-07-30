@@ -7,7 +7,13 @@
       "Bash(npm install:*)",
       "Bash(powershell:*)",
       "Bash(npm run:*)",
-      "Bash(.start.ps1)"
+      "Bash(.start.ps1)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npx nx build:*)",
+      "Bash(timeout 30s npm run dev)",
+      "Bash(rm:*)",
+      "Bash(./stop.ps1)"
     ],
     "deny": []
   }

@@ -7,6 +7,7 @@ import { Footer } from '../ui/Footer';
 import { Shop } from './Shop';
 import { TankGrid } from './TankGrid';
 import { TankSummary } from './TankSummary';
+import { BattleView } from './BattleView';
 import { Loader2 } from 'lucide-react';
 import { GamePiece, Position } from '@aquarium/shared-types';
 import { analyzeTank } from '../../utils/tankAnalysis';
@@ -48,7 +49,7 @@ const getTypeColors = (type: string) => {
 };
 
 export function GameView() {
-  const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock, confirmPlacement } = useGame();
+  const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock, confirmPlacement, enterPlacementPhase } = useGame();
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [hoveredPiece, setHoveredPiece] = useState<GamePiece | null>(null);
   const [hoveredGridPiece, setHoveredGridPiece] = useState<GamePiece | null>(null);
@@ -229,6 +230,11 @@ export function GameView() {
         </div>
       </div>
     );
+  }
+
+  // Handle battle and placement phases
+  if (gameState.phase === 'placement' || gameState.phase === 'battle') {
+    return <BattleView gameState={gameState} />;
   }
 
   // Calculate tank analysis for the summary
@@ -431,6 +437,7 @@ export function GameView() {
                   className="w-full mt-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg hover:shadow-lg transition-all"
                   onClick={() => {
                     confirmPlacement();
+                    enterPlacementPhase();
                   }}
                 >
                   Confirm Placement & Prepare for Battle

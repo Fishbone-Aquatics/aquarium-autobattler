@@ -34,6 +34,7 @@ export interface TankAnalysis {
   fishCount: number;
   totalPieces: number;
   enhancedPieces: GamePiece[];
+  synergies: string[];
   pieceBreakdown: Array<{
     piece: EnhancedGamePiece;
     originalStats: { attack: number; health: number; speed: number };
@@ -294,6 +295,16 @@ export const analyzeTank = (pieces: GamePiece[]): TankAnalysis => {
   const baseAverageSpeed = combatPieces.length > 0 ? baseSpeed / combatPieces.length : 0;
   const bonusAverageSpeed = averageSpeed - baseAverageSpeed;
   
+  // Collect unique synergies from all pieces
+  const synergies: string[] = [];
+  pieceBreakdown.forEach(breakdown => {
+    breakdown.activeBonuses.forEach(bonus => {
+      if (!synergies.includes(bonus.effect)) {
+        synergies.push(bonus.effect);
+      }
+    });
+  });
+  
   return {
     totalAttack,
     baseAttack,
@@ -307,6 +318,7 @@ export const analyzeTank = (pieces: GamePiece[]): TankAnalysis => {
     fishCount,
     totalPieces: placedPieces.length,
     enhancedPieces: placedPieces,
+    synergies,
     pieceBreakdown
   };
 };

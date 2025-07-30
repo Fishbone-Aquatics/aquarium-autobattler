@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { GameState, GamePiece, Position, Tank, DraftState } from '@aquarium/shared-types';
+import { GameState, GamePiece, Position, Tank, DraftState, BattleState, BattleEvent, BattlePiece, StatusEffect } from '@aquarium/shared-types';
 import { PIECE_LIBRARY } from '../app/data/pieces';
 import { v4 as uuidv4 } from 'uuid';
 import { PlayerService } from '../player/player.service';
@@ -41,7 +41,6 @@ export class GameService {
       battleEvents: [],
       selectedPiece: null,
       opponentGold: 10,
-      opponentShop: this.generateShop(),
       lockedShopIndex: null,
       goldHistory: [
         {
@@ -254,10 +253,108 @@ export class GameService {
     return gameState;
   }
 
+  async finalizeBattleRewards(socketId: string): Promise<any> {
+    const gameState = await this.getSession(socketId);
+    
+    if (!gameState.battleState) {
+      throw new BadRequestException('No battle state found');
+    }
+    
+    if (!gameState.battleState.winner) {
+      throw new BadRequestException('Battle not finished - no winner determined');
+    }
+    
+    const battleResult = { winner: gameState.battleState.winner };
+    
+    // Update win/loss counts
+    if (battleResult.winner === 'player') {
+      gameState.wins++;
+      gameState.opponentLosses++;
+      gameState.lossStreak = 0;
+      gameState.opponentLossStreak++;
+    } else if (battleResult.winner === 'opponent') {
+      gameState.losses++;
+      gameState.opponentWins++;
+      gameState.lossStreak++;
+      gameState.opponentLossStreak = 0;
+    } else if (battleResult.winner === 'draw') {
+      // For draws, no win/loss changes but reset both streaks
+      gameState.lossStreak = 0;
+      gameState.opponentLossStreak = 0;
+    }
+
+    // Calculate player rewards
+    const playerBaseReward = 5;
+    const playerWinBonus = battleResult.winner === 'player' ? 3 : 0;
+    const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
+    const playerTotalReward = playerBaseReward + playerWinBonus + playerLossStreakBonus;
+
+    gameState.gold += playerTotalReward;
+    gameState.goldHistory.push({
+      id: uuidv4(),
+      round: gameState.round,
+      type: 'battle_reward',
+      amount: playerTotalReward,
+      description: `Battle ${battleResult.winner === 'player' ? 'won' : 'lost'}`,
+      timestamp: Date.now(),
+    });
+
+    // Calculate opponent rewards (same mechanics as player)
+    const opponentBaseReward = 5;
+    const opponentWinBonus = battleResult.winner === 'opponent' ? 3 : 0;
+    const opponentLossStreakBonus = Math.min(gameState.opponentLossStreak, 3);
+    const opponentTotalReward = opponentBaseReward + opponentWinBonus + opponentLossStreakBonus;
+
+    gameState.opponentGold += opponentTotalReward;
+
+    // Player Interest
+    const playerInterest = Math.min(Math.floor(gameState.gold / 10), 5);
+    if (playerInterest > 0) {
+      gameState.gold += playerInterest;
+      gameState.goldHistory.push({
+        id: uuidv4(),
+        round: gameState.round,
+        type: 'interest',
+        amount: playerInterest,
+        description: 'Interest earned',
+        timestamp: Date.now(),
+      });
+    }
+
+    // Opponent Interest (same calculation as player)
+    const opponentInterest = Math.min(Math.floor(gameState.opponentGold / 10), 5);
+    if (opponentInterest > 0) {
+      gameState.opponentGold += opponentInterest;
+    }
+
+    // Advance round
+    gameState.round++;
+    gameState.phase = 'shop';
+    gameState.rerollsThisRound = 0;
+    
+    // Generate new shop
+    gameState.shop = this.generateShop();
+    
+    // Clear battle state
+    gameState.battleState = undefined;
+    
+    this.updateGameState(socketId, gameState);
+
+    return {
+      winner: battleResult.winner,
+      rewards: {
+        playerGold: playerTotalReward,
+        playerInterest,
+        opponentGold: opponentTotalReward,
+        opponentInterest,
+      },
+    };
+  }
+
   async startBattle(socketId: string): Promise<any> {
     const gameState = await this.getSession(socketId);
     
-    // Simulate battle
+    // Simulate battle (legacy method for non-live battles)
     const battleResult = this.simulateBattle(gameState.playerTank, gameState.opponentTank);
     
     // Update game state based on result
@@ -273,34 +370,48 @@ export class GameService {
       gameState.opponentLossStreak = 0;
     }
 
-    // Calculate rewards
-    const baseReward = 5;
-    const winBonus = battleResult.winner === 'player' ? 3 : 0;
-    const lossStreakBonus = Math.min(gameState.lossStreak, 3);
-    const totalReward = baseReward + winBonus + lossStreakBonus;
+    // Calculate player rewards
+    const playerBaseReward = 5;
+    const playerWinBonus = battleResult.winner === 'player' ? 3 : 0;
+    const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
+    const playerTotalReward = playerBaseReward + playerWinBonus + playerLossStreakBonus;
 
-    gameState.gold += totalReward;
+    gameState.gold += playerTotalReward;
     gameState.goldHistory.push({
       id: uuidv4(),
       round: gameState.round,
       type: 'battle_reward',
-      amount: totalReward,
+      amount: playerTotalReward,
       description: `Battle ${battleResult.winner === 'player' ? 'won' : 'lost'}`,
       timestamp: Date.now(),
     });
 
-    // Interest
-    const interest = Math.min(Math.floor(gameState.gold / 10), 5);
-    if (interest > 0) {
-      gameState.gold += interest;
+    // Calculate opponent rewards (same mechanics as player)
+    const opponentBaseReward = 5;
+    const opponentWinBonus = battleResult.winner === 'opponent' ? 3 : 0;
+    const opponentLossStreakBonus = Math.min(gameState.opponentLossStreak, 3);
+    const opponentTotalReward = opponentBaseReward + opponentWinBonus + opponentLossStreakBonus;
+
+    gameState.opponentGold += opponentTotalReward;
+
+    // Player Interest
+    const playerInterest = Math.min(Math.floor(gameState.gold / 10), 5);
+    if (playerInterest > 0) {
+      gameState.gold += playerInterest;
       gameState.goldHistory.push({
         id: uuidv4(),
         round: gameState.round,
         type: 'interest',
-        amount: interest,
+        amount: playerInterest,
         description: 'Interest earned',
         timestamp: Date.now(),
       });
+    }
+
+    // Opponent Interest (same calculation as player)
+    const opponentInterest = Math.min(Math.floor(gameState.opponentGold / 10), 5);
+    if (opponentInterest > 0) {
+      gameState.opponentGold += opponentInterest;
     }
 
     // Advance round
@@ -317,8 +428,10 @@ export class GameService {
       winner: battleResult.winner,
       events: battleResult.events,
       rewards: {
-        gold: totalReward,
-        interest,
+        playerGold: playerTotalReward,
+        playerInterest,
+        opponentGold: opponentTotalReward,
+        opponentInterest,
       },
     };
   }
@@ -419,6 +532,136 @@ export class GameService {
     });
     
     return result;
+  }
+
+  async enterPlacementPhase(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    if (gameState.phase !== 'shop') {
+      throw new BadRequestException('Can only enter placement phase from shop phase');
+    }
+
+    // Generate opponent tank for battle comparison
+    const { tank, remainingGold } = this.generateOpponentTankWithGold();
+    gameState.opponentTank = tank;
+    gameState.opponentGold = remainingGold; // Track remaining gold
+    gameState.phase = 'placement';
+    
+    this.updateGameState(socketId, gameState);
+    return gameState;
+  }
+
+  async enterBattlePhase(socketId: string): Promise<GameState> {
+    const gameState = await this.getSession(socketId);
+    
+    if (gameState.phase !== 'placement') {
+      throw new BadRequestException('Can only enter battle phase from placement phase');
+    }
+
+    // Initialize battle state but keep on placement phase
+    const battleState = this.initializeBattleState(gameState);
+    gameState.battleState = battleState;
+    gameState.phase = 'battle'; // Still need to track battle state internally
+    
+    this.updateGameState(socketId, gameState);
+    
+    return gameState;
+  }
+
+  // Method to advance battle by one turn (called from gateway)
+  async advanceBattleTurn(socketId: string): Promise<{ gameState: GameState; turnEvents: any[] }> {
+    const gameState = await this.getSession(socketId);
+    const battleState = gameState.battleState;
+    
+    if (!battleState || !battleState.active) {
+      throw new BadRequestException('No active battle');
+    }
+
+    const turnEvents = [];
+
+    // Add round start event
+    const roundEvent: BattleEvent = {
+      id: uuidv4(),
+      type: 'round_start',
+      source: 'system',
+      value: 0,
+      round: battleState.currentRound,
+      turn: battleState.currentTurn,
+      timestamp: Date.now(),
+      description: `Turn ${battleState.currentTurn} begins`,
+    };
+    
+    battleState.events.push(roundEvent);
+    turnEvents.push(roundEvent);
+
+    // Simple damage calculation
+    const playerDamage = battleState.playerPieces
+      .filter(p => !p.isDead)
+      .reduce((sum, p) => sum + p.stats.attack, 0);
+    
+    const opponentDamage = battleState.opponentPieces
+      .filter(p => !p.isDead)
+      .reduce((sum, p) => sum + p.stats.attack, 0);
+
+    // Apply damage
+    if (playerDamage > 0) {
+      battleState.opponentHealth = Math.max(0, battleState.opponentHealth - playerDamage);
+      
+      const attackEvent: BattleEvent = {
+        id: uuidv4(),
+        type: 'attack',
+        source: 'player-tank',
+        sourceName: 'Your Tank',
+        target: 'opponent-tank',
+        targetName: 'Opponent Tank',
+        value: playerDamage,
+        round: battleState.currentRound,
+        turn: battleState.currentTurn,
+        timestamp: Date.now(),
+        description: `Your tank deals ${playerDamage} damage`,
+      };
+      
+      battleState.events.push(attackEvent);
+      turnEvents.push(attackEvent);
+    }
+
+    if (opponentDamage > 0 && battleState.opponentHealth > 0) {
+      battleState.playerHealth = Math.max(0, battleState.playerHealth - opponentDamage);
+      
+      const attackEvent: BattleEvent = {
+        id: uuidv4(),
+        type: 'attack',
+        source: 'opponent-tank',
+        sourceName: 'Opponent Tank',
+        target: 'player-tank',
+        targetName: 'Your Tank',
+        value: opponentDamage,
+        round: battleState.currentRound,
+        turn: battleState.currentTurn,
+        timestamp: Date.now(),
+        description: `Opponent tank deals ${opponentDamage} damage`,
+      };
+      
+      battleState.events.push(attackEvent);
+      turnEvents.push(attackEvent);
+    }
+
+    // Check for winner
+    if (battleState.playerHealth <= 0) {
+      battleState.winner = 'opponent';
+      battleState.active = false;
+    } else if (battleState.opponentHealth <= 0) {
+      battleState.winner = 'player';
+      battleState.active = false;
+    } else if (battleState.currentTurn >= 20) {
+      battleState.winner = 'draw';
+      battleState.active = false;
+    }
+
+    battleState.currentTurn++;
+    this.updateGameState(socketId, gameState);
+
+    return { gameState, turnEvents };
   }
 
   // Private helper methods
@@ -560,5 +803,226 @@ export class GameService {
       health: piece.stats.health + healthBonus,
       speed: piece.stats.speed + speedBonus
     };
+  }
+
+  private generateOpponentTankWithGold(): { tank: Tank; remainingGold: number } {
+    // Generate a simple opponent tank for testing
+    const opponentPieces: GamePiece[] = [];
+    const grid: (string | null)[][] = Array(6).fill(null).map(() => Array(8).fill(null));
+    
+    // Start with similar gold to player
+    let opponentGold = 10;
+    const maxPieces = 5;
+    let pieceCount = 0;
+    
+    // Generate pieces within budget
+    while (opponentGold > 0 && pieceCount < maxPieces) {
+      const piece = this.getRandomPiece();
+      if (piece && piece.cost <= opponentGold) {
+        // Find a valid position for the piece
+        let placed = false;
+        let attempts = 0;
+        while (!placed && attempts < 50) {
+          const position = { 
+            x: Math.floor(Math.random() * 8), 
+            y: Math.floor(Math.random() * 6) 
+          };
+          
+          // Check if position is valid for this piece
+          if (this.isValidPositionForGrid(grid, piece, position)) {
+            const opponentPiece = { 
+              ...piece, 
+              id: uuidv4(),
+              position
+            };
+            
+            // Place piece on grid
+            for (const offset of piece.shape) {
+              const x = position.x + offset.x;
+              const y = position.y + offset.y;
+              if (x >= 0 && x < 8 && y >= 0 && y < 6) {
+                grid[y][x] = opponentPiece.id;
+              }
+            }
+            
+            opponentPieces.push(opponentPiece);
+            opponentGold -= piece.cost;
+            pieceCount++;
+            placed = true;
+          }
+          attempts++;
+        }
+      }
+      
+      // If we've tried too many times without finding affordable pieces, stop
+      if (opponentGold > 0 && pieceCount === 0) {
+        break;
+      }
+    }
+
+    const tank = {
+      id: 'opponent',
+      pieces: opponentPieces,
+      waterQuality: Math.floor(Math.random() * 6) + 3, // 3-8
+      temperature: 25,
+      grid,
+    };
+    
+    return {
+      tank,
+      remainingGold: opponentGold
+    };
+  }
+
+  private generateOpponentTank(): Tank {
+    return this.generateOpponentTankWithGold().tank;
+  }
+
+  private isValidPositionForGrid(grid: (string | null)[][], piece: GamePiece, position: Position): boolean {
+    for (const offset of piece.shape) {
+      const x = position.x + offset.x;
+      const y = position.y + offset.y;
+      
+      if (x < 0 || x >= 8 || y < 0 || y >= 6) {
+        return false;
+      }
+      
+      if (grid[y][x] !== null) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  private initializeBattleState(gameState: GameState): BattleState {
+    const playerPieces = this.convertToBattlePieces(gameState.playerTank.pieces);
+    const opponentPieces = this.convertToBattlePieces(gameState.opponentTank.pieces);
+
+    const playerMaxHealth = playerPieces.reduce((sum, p) => sum + p.stats.maxHealth, 0);
+    const opponentMaxHealth = opponentPieces.reduce((sum, p) => sum + p.stats.maxHealth, 0);
+
+    return {
+      active: true,
+      currentRound: 1,
+      currentTurn: 1,
+      playerHealth: playerMaxHealth,
+      opponentHealth: opponentMaxHealth,
+      playerMaxHealth,
+      opponentMaxHealth,
+      winner: null,
+      events: [],
+      playerPieces,
+      opponentPieces,
+    };
+  }
+
+  private convertToBattlePieces(pieces: GamePiece[]): BattlePiece[] {
+    return pieces.filter(p => p.position).map(piece => ({
+      ...piece,
+      currentHealth: piece.stats.maxHealth,
+      isDead: false,
+      statusEffects: [],
+      nextActionTime: 0,
+    }));
+  }
+
+  private async runBattleSimulation(socketId: string): Promise<void> {
+    const gameState = await this.getSession(socketId);
+    const battleState = gameState.battleState!;
+
+    // Simple battle simulation - can be enhanced later
+    let turn = 1;
+    const maxTurns = 20;
+
+    while (turn <= maxTurns && !battleState.winner) {
+      // Add round start event
+      const roundEvent: BattleEvent = {
+        id: uuidv4(),
+        type: 'round_start',
+        source: 'system',
+        value: 0,
+        round: battleState.currentRound,
+        turn,
+        timestamp: Date.now(),
+        description: `Turn ${turn} begins`,
+      };
+      
+      battleState.events.push(roundEvent);
+
+      // Simple damage calculation
+      const playerDamage = battleState.playerPieces
+        .filter(p => !p.isDead)
+        .reduce((sum, p) => sum + p.stats.attack, 0);
+      
+      const opponentDamage = battleState.opponentPieces
+        .filter(p => !p.isDead)
+        .reduce((sum, p) => sum + p.stats.attack, 0);
+
+      // Apply damage
+      if (playerDamage > 0) {
+        battleState.opponentHealth = Math.max(0, battleState.opponentHealth - playerDamage);
+        
+        const attackEvent: BattleEvent = {
+          id: uuidv4(),
+          type: 'attack',
+          source: 'player-tank',
+          sourceName: 'Your Tank',
+          target: 'opponent-tank',
+          targetName: 'Opponent Tank',
+          value: playerDamage,
+          round: battleState.currentRound,
+          turn,
+          timestamp: Date.now(),
+          description: `Your tank deals ${playerDamage} damage`,
+        };
+        
+        battleState.events.push(attackEvent);
+      }
+
+      if (opponentDamage > 0 && battleState.opponentHealth > 0) {
+        battleState.playerHealth = Math.max(0, battleState.playerHealth - opponentDamage);
+        
+        const attackEvent: BattleEvent = {
+          id: uuidv4(),
+          type: 'attack',
+          source: 'opponent-tank',
+          sourceName: 'Opponent Tank',
+          target: 'player-tank',
+          targetName: 'Your Tank',
+          value: opponentDamage,
+          round: battleState.currentRound,
+          turn,
+          timestamp: Date.now(),
+          description: `Opponent tank deals ${opponentDamage} damage`,
+        };
+        
+        battleState.events.push(attackEvent);
+      }
+
+      // Check for winner
+      if (battleState.playerHealth <= 0) {
+        battleState.winner = 'opponent';
+      } else if (battleState.opponentHealth <= 0) {
+        battleState.winner = 'player';
+      } else if (turn >= maxTurns) {
+        battleState.winner = 'draw';
+      }
+
+      battleState.currentTurn = turn;
+      turn++;
+
+      // Update game state
+      this.updateGameState(socketId, gameState);
+
+      // Add delay for animation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Battle complete
+    battleState.active = false;
+    this.updateGameState(socketId, gameState);
+
+    console.log(`🏁 Battle complete! Winner: ${battleState.winner}`);
   }
 }

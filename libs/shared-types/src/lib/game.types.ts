@@ -35,11 +35,46 @@ export interface Tank {
 }
 
 export interface BattleEvent {
-  type: 'attack' | 'heal' | 'status' | 'ability';
+  id: string;
+  type: 'attack' | 'heal' | 'status' | 'ability' | 'death' | 'round_start';
   source: string;
+  sourceName?: string;
   target?: string;
+  targetName?: string;
   value: number;
   round: number;
+  turn: number;
+  timestamp: number;
+  description: string;
+}
+
+export interface BattleState {
+  active: boolean;
+  currentRound: number;
+  currentTurn: number;
+  playerHealth: number;
+  opponentHealth: number;
+  playerMaxHealth: number;
+  opponentMaxHealth: number;
+  winner: BattleResult | null;
+  events: BattleEvent[];
+  playerPieces: BattlePiece[];
+  opponentPieces: BattlePiece[];
+}
+
+export interface BattlePiece extends GamePiece {
+  currentHealth: number;
+  isDead: boolean;
+  statusEffects: StatusEffect[];
+  nextActionTime: number;
+}
+
+export interface StatusEffect {
+  id: string;
+  type: 'poison' | 'healing' | 'buff' | 'debuff';
+  value: number;
+  duration: number;
+  description: string;
 }
 
 export type BattleResult = 'player' | 'opponent' | 'draw';
@@ -62,9 +97,9 @@ export interface GameState {
   opponentTank: Tank;
   shop: (GamePiece | null)[];
   battleEvents: BattleEvent[];
+  battleState?: BattleState;
   selectedPiece: GamePiece | null;
   opponentGold: number;
-  opponentShop: (GamePiece | null)[];
   lockedShopIndex: number | null;
   goldHistory: GoldTransaction[];
   rerollsThisRound: number;

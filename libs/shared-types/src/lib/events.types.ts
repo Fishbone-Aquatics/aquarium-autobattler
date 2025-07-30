@@ -69,6 +69,8 @@ export const SOCKET_EVENTS = {
   SHOP_LOCK: 'shop:lock',
   TANK_UPDATE: 'tank:update',
   BATTLE_START: 'battle:start',
+  ENTER_PLACEMENT_PHASE: 'phase:placement',
+  ENTER_BATTLE_PHASE: 'phase:battle',
   GET_CALCULATED_STATS: 'stats:get',
   SAVE_DRAFT_STATE: 'draft:save',
   RESTORE_DRAFT_STATE: 'draft:restore',
@@ -78,6 +80,7 @@ export const SOCKET_EVENTS = {
   GAME_STATE_UPDATE: 'game:state:update',
   BATTLE_STEP: 'battle:step',
   BATTLE_COMPLETE: 'battle:complete',
+  PHASE_CHANGED: 'phase:changed',
   CALCULATED_STATS_UPDATE: 'stats:update',
   DRAFT_STATE_SAVED: 'draft:saved',
   ERROR: 'error'
