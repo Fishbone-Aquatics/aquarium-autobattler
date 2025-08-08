@@ -371,6 +371,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       sessionId: gameState.playerTank.id,
       playerId: gameState.playerTank.id,
     });
+    
+    // Request calculated stats for tooltips in battle view
+    setTimeout(() => {
+      socket.emit(SOCKET_EVENTS.GET_CALCULATED_STATS);
+    }, 200); // Small delay to let the phase transition complete
   };
 
   const enterBattlePhase = () => {

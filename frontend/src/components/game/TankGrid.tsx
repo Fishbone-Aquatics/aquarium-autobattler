@@ -234,7 +234,11 @@ export function TankGrid({
                         highlightedPieceId === piece.id 
                           ? 'ring-4 ring-yellow-400 ring-opacity-75 scale-110 shadow-2xl z-10' 
                           : ''
-                      } cursor-pointer hover:scale-105`}
+                      } ${
+                        (piece as any).isDead 
+                          ? 'opacity-50 grayscale saturate-0' 
+                          : 'cursor-pointer hover:scale-105'
+                      }`}
                       draggable={interactive}
                       onDragStart={() => handleDragStart(piece)}
                       onDragEnd={handleDragEnd}
@@ -244,64 +248,119 @@ export function TankGrid({
                       {/* Only show text on the origin cell */}
                       {piece.position!.x === x && piece.position!.y === y && (
                         <div className="text-center pointer-events-none">
-                          <div className="text-xs font-bold">{piece.name.split(' ')[0]}</div>
-                          {(() => {
-                            // Calculate buffed stats for display
-                            const placedPieces = pieces.filter(p => p.position);
-                            
-                            // Simple adjacency calculation for display (replicating the logic from GameView)
-                            let attackBonus = 0;
-                            let healthBonus = 0;
-                            
-                            if (piece.position) {
-                              // Get adjacent positions (8 directions)
-                              const adjacentPositions = [
-                                { x: piece.position.x - 1, y: piece.position.y - 1 },
-                                { x: piece.position.x, y: piece.position.y - 1 },
-                                { x: piece.position.x + 1, y: piece.position.y - 1 },
-                                { x: piece.position.x - 1, y: piece.position.y },
-                                { x: piece.position.x + 1, y: piece.position.y },
-                                { x: piece.position.x - 1, y: piece.position.y + 1 },
-                                { x: piece.position.x, y: piece.position.y + 1 },
-                                { x: piece.position.x + 1, y: piece.position.y + 1 },
-                              ];
+                          {(piece as any).isDead ? (
+                            <div className="text-center">
+                              <div className="text-xs font-bold text-red-300">{piece.name.split(' ')[0]}</div>
+                              <div className="text-red-400 text-lg">💀</div>
+                              <div className="text-[8px] text-red-300">KO</div>
+                            </div>
+                          ) : (
+                            (() => {
+                              // Calculate buffed stats for display
+                              const placedPieces = pieces.filter(p => p.position);
+                              
+                              // Simple adjacency calculation for display (replicating the logic from GameView)
+                              let attackBonus = 0;
+                              let healthBonus = 0;
+                              
+                              if (piece.position) {
+                                // Helper function for multi-cell adjacency (matching GameView.tsx)
+                                const getAdjacentPositionsForPiece = (targetPiece: GamePiece): Position[] => {
+                                  if (!targetPiece.position) return [];
+                                  
+                                  // Get all cells occupied by this piece
+                                  const occupiedCells = targetPiece.shape.map(offset => ({
+                                    x: targetPiece.position!.x + offset.x,
+                                    y: targetPiece.position!.y + offset.y
+                                  }));
+                                  
+                                  // Get all adjacent positions (8-directional) for each occupied cell
+                                  const adjacentPositions = new Set<string>();
+                                  
+                                  occupiedCells.forEach(cell => {
+                                    // Add all 8 adjacent positions for this cell
+                                    for (let dx = -1; dx <= 1; dx++) {
+                                      for (let dy = -1; dy <= 1; dy++) {
+                                        if (dx === 0 && dy === 0) continue; // Skip the cell itself
+                                        
+                                        const adjPos = { x: cell.x + dx, y: cell.y + dy };
+                                        
+                                        // Only add if it's not already occupied by our own piece
+                                        if (!occupiedCells.some(occupied => occupied.x === adjPos.x && occupied.y === adjPos.y)) {
+                                          adjacentPositions.add(`${adjPos.x},${adjPos.y}`);
+                                        }
+                                      }
+                                    }
+                                  });
+                                  
+                                  // Convert back to Position objects
+                                  return Array.from(adjacentPositions).map(posStr => {
+                                    const [x, y] = posStr.split(',').map(Number);
+                                    return { x, y };
+                                  });
+                                };
 
-                              // Find adjacent pieces (simplified - just checking position, not full shape)
-                              const adjacentPieces = placedPieces.filter(p => 
-                                p.position && p.id !== piece.id && adjacentPositions.some(pos => 
-                                  p.position!.x === pos.x && p.position!.y === pos.y
-                                )
-                              );
+                                // Get all adjacent positions for this multi-cell piece
+                                const adjacentPositions = getAdjacentPositionsForPiece(piece);
 
-                              // Adjacency bonuses
-                              adjacentPieces.forEach(adjacentPiece => {
-                                const pieceBonus = getPieceBonuses(adjacentPiece);
-                                if (pieceBonus && (adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && piece.type === 'fish') {
-                                  if (pieceBonus.attack) attackBonus += pieceBonus.attack;
-                                  if (pieceBonus.health) healthBonus += pieceBonus.health;
-                                }
-                              });
+                                // Find adjacent pieces - check if any of their cells are adjacent to any of our cells
+                                const adjacentPieces = placedPieces.filter(p => {
+                                  if (!p.position || p.id === piece.id) return false;
+                                  
+                                  // Check if any cell of piece p is adjacent to our piece
+                                  return p.shape.some(offset => {
+                                    const cellPos = { x: p.position!.x + offset.x, y: p.position!.y + offset.y };
+                                    return adjacentPositions.some(adjPos => adjPos.x === cellPos.x && adjPos.y === cellPos.y);
+                                  });
+                                });
 
-                              // Schooling fish bonuses
-                              if (piece.tags.includes('schooling')) {
-                                const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
-                                const schoolingBonus = SCHOOLING_BONUSES[piece.name as keyof typeof SCHOOLING_BONUSES];
-                                
-                                if (schoolingBonus && typeof schoolingBonus === 'object' && 'attackPerSchooling' in schoolingBonus && adjacentSchoolingCount > 0) {
-                                  attackBonus += adjacentSchoolingCount * schoolingBonus.attackPerSchooling;
+                                // Adjacency bonuses from plants and consumables
+                                adjacentPieces.forEach(adjacentPiece => {
+                                  const pieceBonus = getPieceBonuses(adjacentPiece);
+                                  if (pieceBonus && (adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && piece.type === 'fish') {
+                                    let bonusAttack = pieceBonus.attack || 0;
+                                    let bonusHealth = pieceBonus.health || 0;
+                                    
+                                    // Check if there's a filter adjacent to the plant to boost its effects by 20%
+                                    if (adjacentPiece.type === 'plant') {
+                                      const filterAdjacent = adjacentPieces.some(p => p.type === 'equipment' && p.tags.includes('filter'));
+                                      if (filterAdjacent) {
+                                        const originalBonus = Math.max(bonusAttack, bonusHealth);
+                                        const boost = Math.ceil(originalBonus * 0.2);
+                                        bonusAttack = bonusAttack > 0 ? bonusAttack + boost : bonusAttack;
+                                        bonusHealth = bonusHealth > 0 ? bonusHealth + boost : bonusHealth;
+                                      }
+                                    }
+                                    
+                                    attackBonus += bonusAttack;
+                                    healthBonus += bonusHealth;
+                                  }
+                                });
+
+                                // Schooling fish bonuses
+                                if (piece.tags.includes('schooling')) {
+                                  const adjacentSchoolingCount = adjacentPieces.filter(p => p.tags.includes('schooling')).length;
+                                  const schoolingBonus = SCHOOLING_BONUSES[piece.name as keyof typeof SCHOOLING_BONUSES];
+                                  
+                                  if (schoolingBonus && typeof schoolingBonus === 'object' && 'attackPerSchooling' in schoolingBonus && adjacentSchoolingCount > 0) {
+                                    attackBonus += adjacentSchoolingCount * schoolingBonus.attackPerSchooling;
+                                  }
                                 }
                               }
-                            }
-                            
-                            const finalAttack = piece.stats.attack + attackBonus;
-                            const finalHealth = piece.stats.health + healthBonus;
-                            
-                            return (
-                              <div className="text-[10px]">
-                                {finalAttack}/{finalHealth}
-                              </div>
-                            );
-                          })()}
+                              
+                              const finalAttack = piece.stats.attack + attackBonus;
+                              const finalHealth = piece.stats.health + healthBonus;
+                              
+                              return (
+                                <div className="text-center">
+                                  <div className="text-xs font-bold">{piece.name.split(' ')[0]}</div>
+                                  <div className="text-[10px]">
+                                    {finalAttack}/{finalHealth}
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          )}
                         </div>
                       )}
                     </div>

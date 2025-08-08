@@ -92,6 +92,42 @@ export function GameView() {
     }
   };
 
+  // Helper function for multi-cell adjacency calculation
+  const getAdjacentPositionsForPiece = (piece: GamePiece): Position[] => {
+    if (!piece.position) return [];
+    
+    // Get all cells occupied by this piece
+    const occupiedCells = piece.shape.map(offset => ({
+      x: piece.position!.x + offset.x,
+      y: piece.position!.y + offset.y
+    }));
+    
+    // Get all adjacent positions (8-directional) for each occupied cell
+    const adjacentPositions = new Set<string>();
+    
+    occupiedCells.forEach(cell => {
+      // Add all 8 adjacent positions for this cell
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          if (dx === 0 && dy === 0) continue; // Skip the cell itself
+          
+          const adjPos = { x: cell.x + dx, y: cell.y + dy };
+          
+          // Only add if it's not already occupied by our own piece
+          if (!occupiedCells.some(occupied => occupied.x === adjPos.x && occupied.y === adjPos.y)) {
+            adjacentPositions.add(`${adjPos.x},${adjPos.y}`);
+          }
+        }
+      }
+    });
+    
+    // Convert back to Position objects
+    return Array.from(adjacentPositions).map(posStr => {
+      const [x, y] = posStr.split(',').map(Number);
+      return { x, y };
+    });
+  };
+
   const calculateAdjacencyBonuses = (targetPiece: GamePiece, allPieces: GamePiece[]) => {
     if (!targetPiece.position) return { attack: 0, health: 0, speed: 0, bonuses: [] };
 
@@ -100,34 +136,49 @@ export function GameView() {
     let healthBonus = 0;
     let speedBonus = 0;
 
-    // Get adjacent positions (8 directions)
-    const adjacentPositions = [
-      { x: targetPiece.position.x - 1, y: targetPiece.position.y - 1 },
-      { x: targetPiece.position.x, y: targetPiece.position.y - 1 },
-      { x: targetPiece.position.x + 1, y: targetPiece.position.y - 1 },
-      { x: targetPiece.position.x - 1, y: targetPiece.position.y },
-      { x: targetPiece.position.x + 1, y: targetPiece.position.y },
-      { x: targetPiece.position.x - 1, y: targetPiece.position.y + 1 },
-      { x: targetPiece.position.x, y: targetPiece.position.y + 1 },
-      { x: targetPiece.position.x + 1, y: targetPiece.position.y + 1 },
-    ];
+    // Get all adjacent positions for this multi-cell piece
+    const adjacentPositions = getAdjacentPositionsForPiece(targetPiece);
 
-    // Find adjacent pieces
-    const adjacentPieces = allPieces.filter(p => 
-      p.position && adjacentPositions.some(pos => 
-        p.position!.x === pos.x && p.position!.y === pos.y
-      )
-    );
+    // Find adjacent pieces - check if any of their cells are adjacent to any of our cells
+    const adjacentPieces = allPieces.filter(p => {
+      if (!p.position || p.id === targetPiece.id) return false;
+      
+      // Check if any cell of piece p is adjacent to our piece
+      return p.shape.some(offset => {
+        const cellPos = { x: p.position!.x + offset.x, y: p.position!.y + offset.y };
+        return adjacentPositions.some(adjPos => adjPos.x === cellPos.x && adjPos.y === cellPos.y);
+      });
+    });
 
-    // Adjacency bonuses
+    // Adjacency bonuses from plants and consumables
     adjacentPieces.forEach(adjacentPiece => {
       const pieceBonus = getPieceBonuses(adjacentPiece);
       
       if (pieceBonus && (adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && targetPiece.type === 'fish') {
-        if (pieceBonus.attack) attackBonus += pieceBonus.attack;
-        if (pieceBonus.health) healthBonus += pieceBonus.health;
-        if (pieceBonus.speed) speedBonus += pieceBonus.speed;
-        bonuses.push(`${adjacentPiece.name} (${pieceBonus.description})`);
+        let bonusAttack = pieceBonus.attack || 0;
+        let bonusHealth = pieceBonus.health || 0;
+        let bonusSpeed = pieceBonus.speed || 0;
+        
+        // Check if there's a filter adjacent to the plant to boost its effects by 20%
+        if (adjacentPiece.type === 'plant') {
+          const filterAdjacent = adjacentPieces.some(p => p.type === 'equipment' && p.tags.includes('filter'));
+          if (filterAdjacent) {
+            const originalBonus = Math.max(bonusAttack, bonusHealth, bonusSpeed);
+            const boost = Math.ceil(originalBonus * 0.2);
+            bonusAttack = bonusAttack > 0 ? bonusAttack + boost : bonusAttack;
+            bonusHealth = bonusHealth > 0 ? bonusHealth + boost : bonusHealth;
+            bonusSpeed = bonusSpeed > 0 ? bonusSpeed + boost : bonusSpeed;
+            bonuses.push(`${adjacentPiece.name} (+20% from Filter)`);
+          } else {
+            bonuses.push(`${adjacentPiece.name}`);
+          }
+        } else {
+          bonuses.push(`${adjacentPiece.name}`);
+        }
+        
+        attackBonus += bonusAttack;
+        healthBonus += bonusHealth;
+        speedBonus += bonusSpeed;
       }
     });
 
@@ -292,10 +343,38 @@ export function GameView() {
             <h3 className="font-bold text-yellow-300 mb-2">{hoveredPiece.name}</h3>
             <div className="text-sm space-y-1">
               <div className="flex gap-3">
-                <span>⚔️ {hoveredPiece.stats.attack}</span>
-                <span>❤️ {hoveredPiece.stats.health}</span>
-                <span>⚡ {hoveredPiece.stats.speed}</span>
+                <span className={hoveredPiece.permanentBonuses?.attack ? 'text-green-400' : ''}>
+                  ⚔️ {hoveredPiece.stats.attack}
+                  {hoveredPiece.permanentBonuses?.attack ? (
+                    <span className="text-green-300 text-xs"> (+{hoveredPiece.permanentBonuses.attack})</span>
+                  ) : null}
+                </span>
+                <span className={hoveredPiece.permanentBonuses?.health ? 'text-green-400' : ''}>
+                  ❤️ {hoveredPiece.stats.health}
+                  {hoveredPiece.permanentBonuses?.health ? (
+                    <span className="text-green-300 text-xs"> (+{hoveredPiece.permanentBonuses.health})</span>
+                  ) : null}
+                </span>
+                <span className={hoveredPiece.permanentBonuses?.speed ? 'text-green-400' : ''}>
+                  ⚡ {hoveredPiece.stats.speed}
+                  {hoveredPiece.permanentBonuses?.speed ? (
+                    <span className="text-green-300 text-xs"> (+{hoveredPiece.permanentBonuses.speed})</span>
+                  ) : null}
+                </span>
               </div>
+              {hoveredPiece.permanentBonuses && hoveredPiece.permanentBonuses.sources.length > 0 && (
+                <div className="mt-2 border-t border-gray-600 pt-2">
+                  <div className="text-yellow-300 font-semibold mb-1 text-xs">Permanent Bonuses:</div>
+                  {hoveredPiece.permanentBonuses.sources.map((source, index) => (
+                    <div key={index} className="text-green-300 text-xs">
+                      {source.count > 1 ? `${source.count}x ` : ''}{source.name}: 
+                      {source.attackBonus > 0 && ` +${source.attackBonus * source.count} ATK`}
+                      {source.healthBonus > 0 && ` +${source.healthBonus * source.count} HP`}
+                      {source.speedBonus > 0 && ` +${source.speedBonus * source.count} SPD`}
+                    </div>
+                  ))}
+                </div>
+              )}
               {hoveredPiece.position && (
                 <div className="text-xs text-gray-400 border-t border-gray-600 pt-1 mt-2">
                   Position: ({hoveredPiece.position.x}, {hoveredPiece.position.y})

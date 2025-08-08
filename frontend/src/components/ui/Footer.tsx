@@ -77,19 +77,44 @@ export function Footer({ phase, waterQuality }: FooterProps) {
               </div>
             )}
             
-            {/* Debug: Clear player ID */}
-            {process.env.NODE_ENV === 'development' && (
+            {/* Session Management Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Reset current session */}
+              <button
+                onClick={async () => {
+                  if (confirm('Reset your current game? This will start a new game but keep your player ID.')) {
+                    try {
+                      const response = await fetch(`http://localhost:3001/api/debug/player/${playerId}`, {
+                        method: 'POST',
+                      });
+                      if (response.ok) {
+                        window.location.reload();
+                      }
+                    } catch (error) {
+                      console.error('Failed to reset session:', error);
+                    }
+                  }
+                }}
+                className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded hover:bg-orange-200 transition-colors"
+                title="Reset your current game (keeps player ID)"
+              >
+                🔄 Reset Game
+              </button>
+              
+              {/* Get new player ID */}
               <button
                 onClick={() => {
-                  localStorage.removeItem('aquarium-player-id');
-                  window.location.reload();
+                  if (confirm('Get a new player ID? This will create a completely new account.')) {
+                    localStorage.removeItem('aquarium-player-id');
+                    window.location.reload();
+                  }
                 }}
                 className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded hover:bg-purple-200 transition-colors"
-                title="Clear persistent player ID and reload"
+                title="Get a new player ID (new account)"
               >
-                🔄 New Player ID
+                👤 New ID
               </button>
-            )}
+            </div>
           </div>
         </div>
         

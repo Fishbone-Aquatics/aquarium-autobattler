@@ -72,11 +72,11 @@ export function getPlantBonus(plantName: string): PlantBonus | null {
 }
 
 // Helper function to format bonus description
-export function formatBonusDescription(source: string, count: number = 1): string {
+export function formatBonusDescription(source: string, count = 1): string {
   const plantBonus = getPlantBonus(source);
   if (plantBonus && count > 1) {
     const effect = plantBonus.effect;
-    let parts = [];
+    const parts = [];
     if (effect.attack && effect.attack > 0) parts.push(`+${effect.attack * count} ATK`);
     if (effect.health && effect.health > 0) parts.push(`+${effect.health * count} HP`);
     return `${source} x${count} (${parts.join(', ')})`;

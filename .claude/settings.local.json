@@ -13,7 +13,10 @@
       "Bash(npx nx build:*)",
       "Bash(timeout 30s npm run dev)",
       "Bash(rm:*)",
-      "Bash(./stop.ps1)"
+      "Bash(./stop.ps1)",
+      "Bash(npx nx serve:*)",
+      "Bash(pkill:*)",
+      "Bash(npx nx lint:*)"
     ],
     "deny": []
   }

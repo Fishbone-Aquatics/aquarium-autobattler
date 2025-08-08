@@ -24,6 +24,13 @@ export interface GamePiece {
   attackBonus?: number;
   healthBonus?: number;
   speedBonus?: number;
+  // Permanent bonuses applied from consumables
+  permanentBonuses?: {
+    attack: number;
+    health: number;
+    speed: number;
+    sources: { name: string; count: number; attackBonus: number; healthBonus: number; speedBonus: number }[];
+  };
 }
 
 export interface Tank {

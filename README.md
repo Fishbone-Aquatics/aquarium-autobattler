@@ -195,6 +195,13 @@ The architecture is designed for easy extension:
 
 This project is for educational purposes and demonstrates modern full-stack architecture patterns.
 
+## 📋 Documentation
+
+For detailed information about features, bugs, and development priorities:
+
+- **[FEATURES.md](./FEATURES.md)** - Complete feature list with implementation status
+- **[TODO.md](./TODO.md)** - Development roadmap, known issues, and bug tracker
+
 ---
 
 *Built with ❤️ using Nx, Next.js, NestJS, and TypeScript*
