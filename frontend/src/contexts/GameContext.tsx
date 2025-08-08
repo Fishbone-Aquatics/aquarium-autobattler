@@ -173,7 +173,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         playerRewards: result.rewards?.playerGold,
         opponentRewards: result.rewards?.opponentGold,
         playerInterest: result.rewards?.playerInterest,
-        opponentInterest: result.rewards?.opponentInterest
+        opponentInterest: result.rewards?.opponentInterest,
+        isGameComplete: result.isGameComplete
       });
       
       // Update game state with final battle result

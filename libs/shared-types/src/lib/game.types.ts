@@ -67,6 +67,7 @@ export interface BattleState {
   events: BattleEvent[];
   playerPieces: BattlePiece[];
   opponentPieces: BattlePiece[];
+  isGameComplete?: boolean;
 }
 
 export interface BattlePiece extends GamePiece {

@@ -333,6 +333,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 result: winner,
                 events: events,
                 rewards: battleRewards.rewards,
+                isGameComplete: battleRewards.isGameComplete,
               });
               
               // Send final game state - still in battle phase so user can see results

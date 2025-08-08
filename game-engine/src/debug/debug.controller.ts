@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { DebugService } from './debug.service';
 
@@ -87,6 +87,37 @@ export class DebugController {
   })
   createPlayerSession(@Param('playerId') playerId: string) {
     return this.debugService.createPlayerSession(playerId);
+  }
+
+  @Patch('player/:playerId')
+  @ApiOperation({ 
+    summary: 'Update specific fields in a player session',
+    description: 'Updates specific game state fields for debugging/testing purposes. Allowed fields: round, gold, phase, wins, losses, lossStreak, opponentLossStreak'
+  })
+  @ApiParam({ name: 'playerId', description: 'Player ID to update', example: 'player-abc123' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Session updated successfully',
+    example: { 
+      message: 'Updated player player-abc123', 
+      success: true,
+      playerId: 'player-abc123',
+      updatedFields: ['round: 14', 'gold: 50'],
+      currentState: { round: 14, gold: 50, phase: 'shop', wins: 5, losses: 2 }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid fields or player not found',
+    example: { 
+      message: 'No valid fields to update. Allowed: round, gold, phase, wins, losses, lossStreak, opponentLossStreak',
+      success: false,
+      playerId: 'player-abc123',
+      allowedFields: ['round', 'gold', 'phase', 'wins', 'losses', 'lossStreak', 'opponentLossStreak']
+    }
+  })
+  updatePlayerSession(@Param('playerId') playerId: string, @Body() updates: any) {
+    return this.debugService.updatePlayerSession(playerId, updates);
   }
 
   @Post('clear-all-sessions')

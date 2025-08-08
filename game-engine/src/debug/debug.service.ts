@@ -136,6 +136,60 @@ export class DebugService {
   }
 
   /**
+   * Update specific fields in a player session
+   */
+  updatePlayerSession(playerId: string, updates: any) {
+    try {
+      const gameState = this.playerService.getSession(playerId);
+      
+      // Allow updating specific fields
+      const allowedFields = ['round', 'gold', 'phase', 'wins', 'losses', 'lossStreak', 'opponentLossStreak'];
+      const updatedFields: string[] = [];
+      
+      for (const [key, value] of Object.entries(updates)) {
+        if (allowedFields.includes(key)) {
+          (gameState as any)[key] = value;
+          updatedFields.push(`${key}: ${value}`);
+        }
+      }
+      
+      if (updatedFields.length === 0) {
+        return {
+          message: `No valid fields to update. Allowed: ${allowedFields.join(', ')}`,
+          success: false,
+          playerId,
+          allowedFields
+        };
+      }
+      
+      this.playerService.updateSession(playerId, gameState);
+      
+      return {
+        message: `Updated player ${playerId}`,
+        success: true,
+        playerId,
+        updatedFields,
+        currentState: {
+          round: gameState.round,
+          gold: gameState.gold,
+          phase: gameState.phase,
+          wins: gameState.wins,
+          losses: gameState.losses,
+          lossStreak: gameState.lossStreak,
+          opponentLossStreak: gameState.opponentLossStreak
+        }
+      };
+    } catch (error) {
+      return {
+        message: `Failed to update player ${playerId}: ${error.message}`,
+        success: false,
+        playerId,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Clear all sessions for debugging
    */
   clearAllSessions() {

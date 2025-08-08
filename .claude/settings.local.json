@@ -16,7 +16,10 @@
       "Bash(./stop.ps1)",
       "Bash(npx nx serve:*)",
       "Bash(pkill:*)",
-      "Bash(npx nx lint:*)"
+      "Bash(npx nx lint:*)",
+      "Bash(curl:*)",
+      "Bash(timeout 15s npm run start:backend)",
+      "Bash(timeout 15s npm run start:frontend)"
     ],
     "deny": []
   }

@@ -4,6 +4,9 @@ import { PIECE_LIBRARY } from '../app/data/pieces';
 import { v4 as uuidv4 } from 'uuid';
 import { PlayerService } from '../player/player.service';
 
+// Game constants
+const MAX_ROUNDS = 15;
+
 // Type for battle pieces with team information
 interface BattlePieceWithTeam extends BattlePiece {
   team: 'player' | 'opponent';
@@ -336,6 +339,9 @@ export class GameService {
       gameState.opponentGold += opponentInterest;
     }
 
+    // Check if we've reached the maximum rounds
+    const isGameComplete = gameState.round >= MAX_ROUNDS;
+    
     // Advance round
     gameState.round++;
     // Keep the game in battle phase so user can see results and click continue
@@ -358,6 +364,7 @@ export class GameService {
         opponentGold: opponentTotalReward,
         opponentInterest,
       },
+      isGameComplete,
     };
   }
 
@@ -376,6 +383,12 @@ export class GameService {
 
   async returnToShopPhase(socketId: string): Promise<GameState> {
     const gameState = await this.getSession(socketId);
+    
+    // Check if campaign is complete (round > MAX_ROUNDS means we just finished round 15)
+    if (gameState.round > MAX_ROUNDS) {
+      // Reset the entire game instead of continuing
+      return await this.resetGameAfterCampaign(socketId);
+    }
     
     // Return to shop phase and clear battle results
     // (Rewards should have already been applied by finalizeBattleRewards)
@@ -396,6 +409,59 @@ export class GameService {
     
     this.updateGameState(socketId, gameState);
     return gameState;
+  }
+
+  async resetGameAfterCampaign(socketId: string): Promise<GameState> {
+    const playerId = this.playerService.getPlayerIdFromSocket(socketId);
+    
+    // Create fresh game state (same as initial creation)
+    const resetState: GameState = {
+      phase: 'shop',
+      round: 1,
+      gold: 10,
+      lossStreak: 0,
+      opponentLossStreak: 0,
+      wins: 0,
+      losses: 0,
+      opponentWins: 0,
+      opponentLosses: 0,
+      playerTank: {
+        id: playerId,
+        pieces: [],
+        waterQuality: 5,
+        temperature: 25,
+        grid: Array(6).fill(null).map(() => Array(8).fill(null)),
+      },
+      opponentTank: {
+        id: 'opponent',
+        pieces: [],
+        waterQuality: 5,
+        temperature: 25,
+        grid: Array(6).fill(null).map(() => Array(8).fill(null)),
+      },
+      shop: this.generateShop(),
+      battleEvents: [],
+      selectedPiece: null,
+      opponentGold: 10,
+      lockedShopIndex: null,
+      goldHistory: [
+        {
+          id: uuidv4(),
+          round: 1,
+          type: 'round_start',
+          amount: 10,
+          description: 'Starting gold',
+          timestamp: Date.now(),
+        },
+      ],
+      rerollsThisRound: 0,
+      battleState: undefined,
+      draftState: undefined,
+    };
+
+    // Update the session with reset state
+    this.playerService.updateSession(playerId, resetState);
+    return resetState;
   }
 
   async saveDraftState(socketId: string, draftState?: DraftState): Promise<DraftState> {
@@ -1286,6 +1352,7 @@ export class GameService {
       events: [],
       playerPieces,
       opponentPieces,
+      isGameComplete: gameState.round >= MAX_ROUNDS,
     };
   }
 

@@ -233,23 +233,35 @@ export function BattleView({ gameState }: BattleViewProps) {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex-1">
                     <h2 className="text-2xl font-bold mb-2 text-blue-900">
-                      {battleState.winner === 'player' ? '🎉 Victory!' : battleState.winner === 'opponent' ? '💀 Defeat!' : '🤝 Draw!'}
+                      {battleState.isGameComplete ? (
+                        '👑 Campaign Complete!'
+                      ) : (
+                        battleState.winner === 'player' ? '🎉 Victory!' : battleState.winner === 'opponent' ? '💀 Defeat!' : '🤝 Draw!'
+                      )}
                     </h2>
                     <p className="text-blue-700">
-                      {battleState.winner === 'player'
-                        ? 'Your aquarium proved superior in battle!'
-                        : battleState.winner === 'opponent' 
-                        ? 'Better luck next time, trainer!'
-                        : 'An evenly matched battle!'}
+                      {battleState.isGameComplete ? (
+                        `You've conquered all 15 rounds! Final record: ${gameState.wins}W-${gameState.losses}L`
+                      ) : (
+                        battleState.winner === 'player'
+                          ? 'Your aquarium proved superior in battle!'
+                          : battleState.winner === 'opponent' 
+                          ? 'Better luck next time, trainer!'
+                          : 'An evenly matched battle!'
+                      )}
                     </p>
                   </div>
                   <button
                     onClick={() => {
                       returnToShop();
                     }}
-                    className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-lg hover:shadow-lg transition-all ml-4"
+                    className={`px-6 py-3 text-white font-bold rounded-lg hover:shadow-lg transition-all ml-4 ${
+                      battleState.isGameComplete 
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 animate-pulse'
+                        : 'bg-gradient-to-r from-orange-500 to-red-500'
+                    }`}
                   >
-                    Continue to Next Round
+                    {battleState.isGameComplete ? '🎉 Start New Campaign' : 'Continue to Next Round'}
                   </button>
                 </div>
                 

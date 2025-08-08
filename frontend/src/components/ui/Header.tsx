@@ -78,9 +78,13 @@ export function Header({
               )}
             </div>
             
-            <div className="flex items-center gap-2 bg-gradient-to-r from-purple-400 to-pink-400 text-white px-3 py-1 rounded-full font-bold">
-              <span>🏆</span>
-              <span>Round {round}/15</span>
+            <div className={`flex items-center gap-2 text-white px-3 py-1 rounded-full font-bold ${
+              round === 15 
+                ? 'bg-gradient-to-r from-yellow-400 to-orange-500 animate-pulse' 
+                : 'bg-gradient-to-r from-purple-400 to-pink-400'
+            }`}>
+              <span>{round === 15 ? '👑' : '🏆'}</span>
+              <span>{round === 15 ? 'FINAL BATTLE' : `Round ${round}/15`}</span>
             </div>
           </div>
         </div>
