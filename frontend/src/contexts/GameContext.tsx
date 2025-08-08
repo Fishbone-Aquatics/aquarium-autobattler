@@ -148,17 +148,63 @@ export function GameProvider({ children }: { children: ReactNode }) {
         turn: event.turn,
         value: event.value,
         source: event.sourceName,
-        target: event.targetName
+        target: event.targetName,
+        healthStates: event.healthStates
       });
       
       // Update game state to reflect the battle event
       setGameState(prevState => {
         if (!prevState || !prevState.battleState) return prevState;
         
-        const updatedBattleState = {
+        let updatedBattleState = {
           ...prevState.battleState,
           events: [...prevState.battleState.events, event],
         };
+        
+        // Update real-time health states if provided
+        if (event.healthStates) {
+          updatedBattleState = {
+            ...updatedBattleState,
+            playerHealth: event.healthStates.playerHealth,
+            opponentHealth: event.healthStates.opponentHealth,
+          };
+        }
+        
+        // Update piece death states if a piece died
+        if (event.healthStates?.targetDied && event.healthStates.targetPieceId) {
+          const targetPieceId = event.healthStates.targetPieceId;
+          
+          // Mark piece as dead in player tank if it's a player piece
+          let updatedPlayerTank = prevState.playerTank;
+          const playerPiece = prevState.playerTank.pieces.find(p => p.id === targetPieceId);
+          if (playerPiece) {
+            updatedPlayerTank = {
+              ...prevState.playerTank,
+              pieces: prevState.playerTank.pieces.map(p => 
+                p.id === targetPieceId ? { ...p, isDead: true } as any : p
+              )
+            };
+          }
+          
+          // Mark piece as dead in opponent tank if it's an opponent piece
+          let updatedOpponentTank = prevState.opponentTank;
+          const opponentPiece = prevState.opponentTank.pieces.find(p => p.id === targetPieceId);
+          if (opponentPiece) {
+            updatedOpponentTank = {
+              ...prevState.opponentTank,
+              pieces: prevState.opponentTank.pieces.map(p => 
+                p.id === targetPieceId ? { ...p, isDead: true } as any : p
+              )
+            };
+          }
+          
+          return {
+            ...prevState,
+            battleState: updatedBattleState,
+            playerTank: updatedPlayerTank,
+            opponentTank: updatedOpponentTank,
+          };
+        }
         
         return {
           ...prevState,

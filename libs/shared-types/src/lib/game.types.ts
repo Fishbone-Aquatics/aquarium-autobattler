@@ -53,6 +53,15 @@ export interface BattleEvent {
   turn: number;
   timestamp: number;
   description: string;
+  // Real-time health states for frontend updates
+  healthStates?: {
+    playerHealth: number;
+    opponentHealth: number;
+    targetPieceId?: string;
+    targetCurrentHealth?: number;
+    targetMaxHealth?: number;
+    targetDied?: boolean;
+  };
 }
 
 export interface BattleState {

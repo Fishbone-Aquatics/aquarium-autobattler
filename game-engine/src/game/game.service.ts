@@ -736,7 +736,20 @@ export class GameService {
         }
       }
 
-      // Create detailed attack event
+      // UPDATE: Recalculate tank health immediately after each attack
+      const currentPlayerHealth = battleState.playerPieces
+        .filter(p => !p.isDead)
+        .reduce((sum, p) => sum + p.currentHealth, 0);
+      
+      const currentOpponentHealth = battleState.opponentPieces
+        .filter(p => !p.isDead)
+        .reduce((sum, p) => sum + p.currentHealth, 0);
+
+      // Update battleState health values immediately
+      battleState.playerHealth = currentPlayerHealth;
+      battleState.opponentHealth = currentOpponentHealth;
+
+      // Create detailed attack event with health states
       const attackEvent: BattleEvent = {
         id: uuidv4(),
         type: 'attack',
@@ -749,6 +762,15 @@ export class GameService {
         turn: battleState.currentTurn,
         timestamp: Date.now(),
         description: `${attacker.team === 'player' ? '🟢' : '🔴'} ${attacker.name} (Speed ${attacker.stats.speed}) attacks ${target.team === 'player' ? '🟢' : '🔴'} ${target.name}! ${baseDamage} base attack${attackBonus > 0 ? ` + ${attackBonus} bonuses` : ''}${waterBonus > 0 ? ` + ${waterBonus} water quality` : ''} = ${finalDamage} damage → ${target.name} ${targetDied ? 'is KO\'d!' : `has ${battlePiece.currentHealth}/${battlePiece.stats.maxHealth} HP left`}`,
+        // Include real-time health states for frontend updates (using immediately calculated values)
+        healthStates: {
+          playerHealth: currentPlayerHealth,
+          opponentHealth: currentOpponentHealth,
+          targetPieceId: target.id,
+          targetCurrentHealth: battlePiece.currentHealth,
+          targetMaxHealth: battlePiece.stats.maxHealth,
+          targetDied: targetDied
+        }
       };
       
       battleState.events.push(attackEvent);
