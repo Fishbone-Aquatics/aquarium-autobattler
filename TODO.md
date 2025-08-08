@@ -81,11 +81,23 @@
 - **Solution**: Expand log area, better formatting, scroll controls
 - **Files**: `BattleView.tsx`
 
-### 11. New ID Shop Bug
-- **Issue**: Getting new player ID doesn't regenerate shop (requires 2g reroll)
+### 11. Reset Game Shop Bug
+- **Issue**: Clicking Reset Game doesn't regenerate shop (requires 2g reroll)
 - **Impact**: Minor UX annoyance for new players
-- **Solution**: Auto-regenerate shop when creating new player ID
+- **Solution**: Auto-regenerate shop when clicking Reset Game.
 - **Files**: `Footer.tsx`, `game.service.ts`
+
+### 12. Water Quality Not Working
+- **Issue**: Water quality doesn't affect piece performance despite being tracked
+- **Impact**: Game mechanic completely non-functional, reduces strategic depth
+- **Solution**: Verify water quality bonuses are applied in battle calculations and adjacency effects
+- **Files**: `game.service.ts`, `calculatePieceStats()`, battle system
+
+### 13. Reroll Cost Scaling
+- **Issue**: Need to verify if reroll cost increases after X rerolls or rounds
+- **Impact**: Unknown if economy balancing mechanic is working
+- **Solution**: Check if reroll cost properly scales (2g → 4g → 6g etc.) and implement if missing
+- **Files**: `Shop.tsx`, `game.service.ts`, reroll logic
 
 ---
 
