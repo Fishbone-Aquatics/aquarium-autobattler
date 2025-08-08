@@ -49,7 +49,7 @@ const getTypeColors = (type: string) => {
 };
 
 export function GameView() {
-  const { gameState, connected, purchasePiece, placePiece, movePiece, rerollShop, toggleShopLock, confirmPlacement, enterPlacementPhase } = useGame();
+  const { gameState, connected, purchasePiece, sellPiece, placePiece, movePiece, rerollShop, toggleShopLock, confirmPlacement, enterPlacementPhase } = useGame();
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [hoveredPiece, setHoveredPiece] = useState<GamePiece | null>(null);
   const [hoveredGridPiece, setHoveredGridPiece] = useState<GamePiece | null>(null);
@@ -582,7 +582,7 @@ export function GameView() {
                       .map((piece) => (
                         <div
                           key={piece.id}
-                          className="bg-yellow-50 rounded-lg p-3 shadow-sm hover:shadow-2xl hover:scale-105 hover:-rotate-1 transition-all duration-300 border-2 border-yellow-300 cursor-grab active:cursor-grabbing transform-gpu"
+                          className="bg-yellow-50 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow duration-200 border-2 border-yellow-300 cursor-grab active:cursor-grabbing"
                           draggable={gameState.phase === 'shop'}
                           onDragStart={(e) => {
                             e.dataTransfer.setData('application/json', JSON.stringify(piece));
@@ -637,7 +637,7 @@ export function GameView() {
                     .map((piece) => (
                       <div
                         key={piece.id}
-                        className="bg-white rounded-lg p-3 shadow-sm hover:shadow-2xl hover:scale-105 hover:rotate-1 transition-all duration-300 transform-gpu cursor-pointer"
+                        className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer"
                         onMouseEnter={() => handleTankPieceHover(piece)}
                         onMouseLeave={() => handleTankPieceHover(null)}
                       >
@@ -667,9 +667,23 @@ export function GameView() {
                               })()}
                             </div>
                           </div>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            ✓ Placed
-                          </span>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              ✓ Placed
+                            </span>
+                            {gameState.phase === 'shop' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  sellPiece(piece.id);
+                                }}
+                                className="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded-full transition-colors font-medium"
+                                title={`Sell for ${Math.floor(piece.cost * 0.75)}g (75% of ${piece.cost}g)`}
+                              >
+                                💰 Sell ${Math.floor(piece.cost * 0.75)}g
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

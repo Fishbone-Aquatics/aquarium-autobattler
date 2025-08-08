@@ -6,6 +6,7 @@ import { PlayerService } from '../player/player.service';
 
 // Game constants
 const MAX_ROUNDS = 15;
+const SELL_PERCENTAGE = 0.75;
 
 // Type for battle pieces with team information
 interface BattlePieceWithTeam extends BattlePiece {
@@ -141,7 +142,7 @@ export class GameService {
     }
 
     const piece = gameState.playerTank.pieces[pieceIndex];
-    const sellPrice = Math.floor(piece.cost * 0.5); // Sell for 50% of cost
+    const sellPrice = Math.floor(piece.cost * SELL_PERCENTAGE);
     
     // Add gold
     gameState.gold += sellPrice;
