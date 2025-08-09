@@ -10,7 +10,9 @@ interface HeaderProps {
   wins: number;
   losses: number;
   lossStreak: number;
+  winStreak: number;
   opponentLossStreak: number;
+  opponentWinStreak: number;
   onOpenGoldTracker?: () => void;
 }
 
@@ -21,7 +23,9 @@ export function Header({
   wins,
   losses,
   lossStreak,
+  winStreak,
   opponentLossStreak,
+  opponentWinStreak,
   onOpenGoldTracker,
 }: HeaderProps) {
   const nextInterest = Math.min(Math.floor(gold / 10), 5);
@@ -58,8 +62,13 @@ export function Header({
                 </span>
               )}
               {lossStreak > 0 && (
-                <span className="text-red-200 text-xs ml-1">
+                <span className="text-red-200 text-xs ml-1" title={`Loss streak: ${lossStreak} ${lossStreak === 1 ? 'loss' : 'losses'} in a row (${lossStreak === 1 ? '+2g' : lossStreak === 2 ? '+4g' : lossStreak === 3 ? '+6g' : lossStreak === 4 ? '+8g' : lossStreak === 5 ? '+10g' : '+12g'} bonus)`}>
                   (L{lossStreak})
+                </span>
+              )}
+              {winStreak >= 2 && (
+                <span className="text-green-200 text-xs ml-1" title={`Win streak: ${winStreak} wins in a row! 🔥 (${winStreak === 2 ? '+1g' : winStreak === 3 ? '+2g' : winStreak === 4 ? '+3g' : '+4g'} bonus)`}>
+                  (W{winStreak})
                 </span>
               )}
               <BarChart3 className="w-3 h-3 ml-1 opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -69,8 +78,13 @@ export function Header({
               <span>🤖</span>
               <span>{opponentGold}g</span>
               {opponentLossStreak > 0 && (
-                <span className="text-red-200 text-xs ml-1">
+                <span className="text-red-200 text-xs ml-1" title={`Opponent loss streak: ${opponentLossStreak} ${opponentLossStreak === 1 ? 'loss' : 'losses'} in a row (${opponentLossStreak === 1 ? '+2g' : opponentLossStreak === 2 ? '+4g' : opponentLossStreak === 3 ? '+6g' : opponentLossStreak === 4 ? '+8g' : opponentLossStreak === 5 ? '+10g' : '+12g'} bonus)`}>
                   (L{opponentLossStreak})
+                </span>
+              )}
+              {opponentWinStreak >= 2 && (
+                <span className="text-green-200 text-xs ml-1" title={`Opponent win streak: ${opponentWinStreak} wins in a row! 🔥 (${opponentWinStreak === 2 ? '+1g' : opponentWinStreak === 3 ? '+2g' : opponentWinStreak === 4 ? '+3g' : '+4g'} bonus)`}>
+                  (W{opponentWinStreak})
                 </span>
               )}
             </div>

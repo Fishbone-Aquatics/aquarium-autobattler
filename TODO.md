@@ -30,9 +30,10 @@
 - **Goal**: Enable real player builds as opponents instead of just AI strategies
 
 ### 4. Opponent AI Improvements
-- **Issue**: AI hoards gold (sitting on 50g with losing streak), poor purchasing decisions
+- **Issue**: AI hoards gold (sitting on 50g with losing streak), poor purchasing decisions, doesn't care about water quality, doesn't utilize reroll when standing on gold, doesnt group things for bonsues or use consumables properly.
+We want to build this system in a way where it will be easy to add more - and they will have functions such as defensive() and aggressive() or frugal() which an be called and determined per round or w/e so we can create dynamic and mutliple bots "opponutes" quickely 
 - **Impact**: Battles become too easy, poor game balance  
-- **Solution**: Implement smarter AI that considers gold efficiency, loss streaks, and power spikes
+- **Solution**: Implement smarter AI that considers gold efficiency (interest, spending, rerolling), loss/win streaks, water quality, and power spikes
 - **Files**: `game.service.ts` - `updateOpponentTank()` method
 
 ---

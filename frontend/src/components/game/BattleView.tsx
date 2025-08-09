@@ -125,7 +125,9 @@ export function BattleView({ gameState }: BattleViewProps) {
           wins={gameState.wins}
           losses={gameState.losses}
           lossStreak={gameState.lossStreak}
+          winStreak={gameState.winStreak}
           opponentLossStreak={gameState.opponentLossStreak}
+          opponentWinStreak={gameState.opponentWinStreak}
           onOpenGoldTracker={() => setIsGoldTrackerOpen(true)}
         />
         

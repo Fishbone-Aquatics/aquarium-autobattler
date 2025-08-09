@@ -29,7 +29,9 @@ export class GameService {
       round: 1,
       gold: 10,
       lossStreak: 0,
+      winStreak: 0,
       opponentLossStreak: 0,
+      opponentWinStreak: 0,
       wins: 0,
       losses: 0,
       opponentWins: 0,
@@ -300,34 +302,72 @@ export class GameService {
       gameState.wins++;
       gameState.opponentLosses++;
       gameState.lossStreak = 0;
+      gameState.winStreak++;
       gameState.opponentLossStreak++;
+      gameState.opponentWinStreak = 0;
     } else if (battleResult.winner === 'opponent') {
       gameState.losses++;
       gameState.opponentWins++;
       gameState.lossStreak++;
+      gameState.winStreak = 0;
       gameState.opponentLossStreak = 0;
+      gameState.opponentWinStreak++;
     } else if (battleResult.winner === 'draw') {
-      // For draws, both parties "win" - no losses, reset loss streaks
-      gameState.wins++;
-      gameState.opponentWins++;
-      gameState.lossStreak = 0;
-      gameState.opponentLossStreak = 0;
+      // Check if this is a double loss (both HP at 0) or a normal draw
+      const isDoubleLoss = gameState.battleState?.playerHealth === 0 && gameState.battleState?.opponentHealth === 0;
+      
+      if (isDoubleLoss) {
+        // Double loss - both players lose
+        gameState.losses++;
+        gameState.opponentLosses++;
+        gameState.lossStreak++;
+        gameState.winStreak = 0;
+        gameState.opponentLossStreak++;
+        gameState.opponentWinStreak = 0;
+      } else {
+        // Normal draw (timeout) - both parties "win"
+        gameState.wins++;
+        gameState.opponentWins++;
+        gameState.lossStreak = 0;
+        gameState.winStreak++;
+        gameState.opponentLossStreak = 0;
+        gameState.opponentWinStreak++;
+      }
     }
 
-    // Calculate player rewards
+    // Check if this is a double loss scenario
+    const isDoubleLoss = battleResult.winner === 'draw' && 
+                         gameState.battleState?.playerHealth === 0 && 
+                         gameState.battleState?.opponentHealth === 0;
+    
+    // Calculate player rewards - everyone gets base, only streaks provide bonuses
     const playerBaseReward = 5;
-    const playerWinBonus = (battleResult.winner === 'player' || battleResult.winner === 'draw') ? 3 : 0;
-    const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
-    const playerBaseAndWin = playerBaseReward + playerWinBonus;
-
-    // Add base battle reward
-    gameState.gold += playerBaseAndWin;
+    // NO win/loss bonuses - only streaks matter
+    
+    // New loss streak bonuses: 2/4/6/8/10/12 gold
+    let playerLossStreakBonus = 0;
+    if (gameState.lossStreak === 1) playerLossStreakBonus = 2;
+    else if (gameState.lossStreak === 2) playerLossStreakBonus = 4;
+    else if (gameState.lossStreak === 3) playerLossStreakBonus = 6;
+    else if (gameState.lossStreak === 4) playerLossStreakBonus = 8;
+    else if (gameState.lossStreak === 5) playerLossStreakBonus = 10;
+    else if (gameState.lossStreak >= 6) playerLossStreakBonus = 12;
+    
+    // New win streak bonuses: 1/2/3/4 gold
+    let playerWinStreakBonus = 0;
+    if (gameState.winStreak === 2) playerWinStreakBonus = 1;
+    else if (gameState.winStreak === 3) playerWinStreakBonus = 2;
+    else if (gameState.winStreak === 4) playerWinStreakBonus = 3;
+    else if (gameState.winStreak >= 5) playerWinStreakBonus = 4;
+    
+    // Add base battle reward (everyone gets this regardless of outcome)
+    gameState.gold += playerBaseReward;
     gameState.goldHistory.push({
       id: uuidv4(),
       round: gameState.round,
       type: 'battle_reward',
-      amount: playerBaseAndWin,
-      description: `Battle ${battleResult.winner === 'player' ? 'won (+3 bonus)' : battleResult.winner === 'draw' ? 'tied (+3 bonus)' : 'lost'} (+5 base)`,
+      amount: playerBaseReward,
+      description: `Battle ${battleResult.winner === 'player' ? 'won' : battleResult.winner === 'draw' ? (isDoubleLoss ? 'double loss (no attackers)' : 'tied') : 'lost'} (+5 base)`,
       timestamp: Date.now(),
     });
 
@@ -339,18 +379,54 @@ export class GameService {
         round: gameState.round,
         type: 'loss_streak_bonus',
         amount: playerLossStreakBonus,
-        description: `Loss streak bonus (${gameState.lossStreak} ${gameState.lossStreak === 1 ? 'loss' : 'losses'})`,
+        description: `Loss streak bonus (L${gameState.lossStreak}: +${playerLossStreakBonus}g)`,
+        timestamp: Date.now(),
+      });
+    }
+    
+    // Add win streak bonus if applicable
+    if (playerWinStreakBonus > 0) {
+      gameState.gold += playerWinStreakBonus;
+      gameState.goldHistory.push({
+        id: uuidv4(),
+        round: gameState.round,
+        type: 'win_streak_bonus',
+        amount: playerWinStreakBonus,
+        description: `Win streak bonus (W${gameState.winStreak}: +${playerWinStreakBonus}g)`,
         timestamp: Date.now(),
       });
     }
 
     // Calculate opponent rewards (same mechanics as player)
     const opponentBaseReward = 5;
-    const opponentWinBonus = (battleResult.winner === 'opponent' || battleResult.winner === 'draw') ? 3 : 0;
-    const opponentLossStreakBonus = Math.min(gameState.opponentLossStreak, 3);
-    const opponentTotalReward = opponentBaseReward + opponentWinBonus + opponentLossStreakBonus;
-
-    gameState.opponentGold += opponentTotalReward;
+    // NO win/loss bonuses - only streaks matter
+    
+    // Opponent loss streak bonuses
+    let opponentLossStreakBonus = 0;
+    if (gameState.opponentLossStreak === 1) opponentLossStreakBonus = 2;
+    else if (gameState.opponentLossStreak === 2) opponentLossStreakBonus = 4;
+    else if (gameState.opponentLossStreak === 3) opponentLossStreakBonus = 6;
+    else if (gameState.opponentLossStreak === 4) opponentLossStreakBonus = 8;
+    else if (gameState.opponentLossStreak === 5) opponentLossStreakBonus = 10;
+    else if (gameState.opponentLossStreak >= 6) opponentLossStreakBonus = 12;
+    
+    // Opponent win streak bonuses
+    let opponentWinStreakBonus = 0;
+    if (gameState.opponentWinStreak === 2) opponentWinStreakBonus = 1;
+    else if (gameState.opponentWinStreak === 3) opponentWinStreakBonus = 2;
+    else if (gameState.opponentWinStreak === 4) opponentWinStreakBonus = 3;
+    else if (gameState.opponentWinStreak >= 5) opponentWinStreakBonus = 4;
+    
+    // Give opponent base reward
+    gameState.opponentGold += opponentBaseReward;
+    
+    // Add opponent streak bonuses separately
+    if (opponentLossStreakBonus > 0) {
+      gameState.opponentGold += opponentLossStreakBonus;
+    }
+    if (opponentWinStreakBonus > 0) {
+      gameState.opponentGold += opponentWinStreakBonus;
+    }
 
     // Player Interest
     const playerInterest = Math.min(Math.floor(gameState.gold / 10), 5);
@@ -392,9 +468,9 @@ export class GameService {
     return {
       winner: battleResult.winner,
       rewards: {
-        playerGold: playerBaseAndWin + playerLossStreakBonus,
+        playerGold: playerBaseReward + playerLossStreakBonus + playerWinStreakBonus,
         playerInterest,
-        opponentGold: opponentTotalReward,
+        opponentGold: opponentBaseReward + opponentLossStreakBonus + opponentWinStreakBonus,
         opponentInterest,
       },
       isGameComplete,
@@ -455,7 +531,9 @@ export class GameService {
       round: 1,
       gold: 10,
       lossStreak: 0,
+      winStreak: 0,
       opponentLossStreak: 0,
+      opponentWinStreak: 0,
       wins: 0,
       losses: 0,
       opponentWins: 0,
@@ -724,11 +802,10 @@ export class GameService {
       ...battleState.opponentPieces.filter(p => !p.isDead && p.type === 'fish').map(p => ({ ...p, team: 'opponent' as const }))
     ];
 
-    // Skip turn if no attacking pieces left on either side
+    // Check if no attacking pieces left on either side - this is a DOUBLE LOSS
     if (alivePieces.length === 0) {
-      // No attacking pieces left, but battle continues until HP reaches 0
-      // Add a log event to indicate this
-      const noAttackersEvent: BattleEvent = {
+      // Double loss scenario - neither player can attack
+      const doubleLossEvent: BattleEvent = {
         id: uuidv4(),
         type: 'round_start',
         source: 'system',
@@ -736,19 +813,24 @@ export class GameService {
         round: battleState.currentRound,
         turn: battleState.currentTurn,
         timestamp: Date.now(),
-        description: `💤 No attacking pieces remain, but ${battleState.playerHealth > 0 ? 'plants still stand guard' : 'the battle rages on'}!`,
+        description: `⚠️ No attacking units remain! Both players lose!`,
+        healthStates: {
+          playerHealth: 0,
+          opponentHealth: 0,
+        },
       };
       
-      battleState.events.push(noAttackersEvent);
-      turnEvents.push(noAttackersEvent);
+      battleState.events.push(doubleLossEvent);
+      turnEvents.push(doubleLossEvent);
       
-      // Check if we should end due to turn limit in this edge case
-      if (battleState.currentTurn >= 20) {
-        battleState.winner = 'draw';
-        battleState.active = false;
-      }
+      // Set both HP to 0 to indicate double loss
+      battleState.playerHealth = 0;
+      battleState.opponentHealth = 0;
       
-      battleState.currentTurn++;
+      // Double loss is technically a draw (both lose)
+      battleState.winner = 'draw';
+      battleState.active = false;
+      
       this.updateGameState(socketId, gameState);
       return { gameState, turnEvents };
     }
@@ -1561,6 +1643,14 @@ export class GameService {
       const opponentDamage = battleState.opponentPieces
         .filter(p => !p.isDead && p.type === 'fish')
         .reduce((sum, p) => sum + p.stats.attack, 0);
+      
+      // Check for double loss scenario (no attackers on either side)
+      if (playerDamage === 0 && opponentDamage === 0) {
+        battleState.playerHealth = 0;
+        battleState.opponentHealth = 0;
+        battleState.winner = 'draw'; // Double loss
+        break;
+      }
 
       // Apply damage
       if (playerDamage > 0) {

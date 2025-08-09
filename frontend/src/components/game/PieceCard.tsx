@@ -19,11 +19,18 @@ interface PieceCardProps {
 }
 
 const rarityColors = {
-  common: 'bg-gray-100 border-gray-300',
-  uncommon: 'bg-green-100 border-green-400',
-  rare: 'bg-blue-100 border-blue-400',
-  epic: 'bg-purple-100 border-purple-400',
-  legendary: 'bg-orange-100 border-orange-400',
+  common: 'bg-gray-100',
+  uncommon: 'bg-green-100',
+  rare: 'bg-blue-100',
+  epic: 'bg-purple-100',
+  legendary: 'bg-orange-100',
+};
+
+const typeBorderColors = {
+  fish: 'border-blue-500',
+  plant: 'border-green-500',
+  equipment: 'border-gray-500',
+  consumable: 'border-orange-500',
 };
 
 const typeIcons = {
@@ -103,8 +110,10 @@ export function PieceCard({
 
   return (
     <div 
-      className={`rounded-lg border-2 p-2 transition-all cursor-pointer bg-white ${
+      className={`rounded-lg border-4 p-2 transition-all cursor-pointer bg-white ${
         rarityColors[piece.rarity]
+      } ${
+        typeBorderColors[piece.type]
       } ${
         isSelected ? 'ring-2 ring-blue-400 scale-105' : ''
       } ${
@@ -134,12 +143,18 @@ export function PieceCard({
                 const isPartOfShape = piece.shape.some(offset => 
                   offset.x === x - 1 && offset.y === y - 1
                 );
+                const shapeColors = {
+                  fish: 'bg-blue-500',
+                  plant: 'bg-green-500',
+                  equipment: 'bg-gray-500',
+                  consumable: 'bg-orange-500',
+                };
                 return (
                   <div
                     key={i}
                     className={`aspect-square rounded-sm ${
                       isPartOfShape 
-                        ? 'bg-blue-500 opacity-70' 
+                        ? `${shapeColors[piece.type]} opacity-70` 
                         : 'bg-gray-200 opacity-30'
                     }`}
                   />

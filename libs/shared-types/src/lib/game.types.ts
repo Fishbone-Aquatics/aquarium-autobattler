@@ -106,7 +106,9 @@ export interface GameState {
   round: number;
   gold: number;
   lossStreak: number;
+  winStreak: number;
   opponentLossStreak: number;
+  opponentWinStreak: number;
   wins: number;
   losses: number;
   opponentWins: number;
@@ -127,7 +129,7 @@ export interface GameState {
 export interface GoldTransaction {
   id: string;
   round: number;
-  type: 'purchase' | 'sell' | 'reroll' | 'battle_reward' | 'loss_streak_bonus' | 'interest' | 'round_start';
+  type: 'purchase' | 'sell' | 'reroll' | 'battle_reward' | 'loss_streak_bonus' | 'win_streak_bonus' | 'interest' | 'round_start';
   amount: number;
   description: string;
   timestamp: number;
