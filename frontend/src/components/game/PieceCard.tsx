@@ -124,68 +124,62 @@ export function PieceCard({
             {piece.type} • {piece.rarity}
           </div>
         </div>
-        <div className="flex items-center gap-1 text-xs">
-          <span className="font-bold text-yellow-600">💰 {piece.cost}g</span>
+        <div className="flex items-center gap-2">
+          {/* Piece Shape Visualization - moved to top right */}
+          {piece.shape && (
+            <div className="grid grid-cols-3 gap-px w-8 h-8">
+              {Array.from({ length: 9 }, (_, i) => {
+                const x = i % 3;
+                const y = Math.floor(i / 3);
+                const isPartOfShape = piece.shape.some(offset => 
+                  offset.x === x - 1 && offset.y === y - 1
+                );
+                return (
+                  <div
+                    key={i}
+                    className={`aspect-square rounded-sm ${
+                      isPartOfShape 
+                        ? 'bg-blue-500 opacity-70' 
+                        : 'bg-gray-200 opacity-30'
+                    }`}
+                  />
+                );
+              })}
+            </div>
+          )}
+          {/* Info icon */}
+          <div 
+            className="text-blue-500 text-sm cursor-pointer hover:text-blue-600" 
+            onMouseEnter={handleViewAbilitiesEnter}
+            onMouseLeave={handleViewAbilitiesLeave}
+          >
+            ℹ️
+          </div>
         </div>
       </div>
       
-      {/* Piece Shape Visualization */}
-      {piece.shape && (
-        <div className="mb-2">
-          <div className="grid grid-cols-3 gap-1 max-w-12 mx-auto">
-            {Array.from({ length: 9 }, (_, i) => {
-              const x = i % 3;
-              const y = Math.floor(i / 3);
-              const isPartOfShape = piece.shape.some(offset => 
-                offset.x === x - 1 && offset.y === y - 1
-              );
-              return (
-                <div
-                  key={i}
-                  className={`aspect-square rounded-sm ${
-                    isPartOfShape 
-                      ? 'bg-blue-500 opacity-70' 
-                      : 'bg-gray-200 opacity-30'
-                  }`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="flex justify-center gap-4 text-lg mb-2">
+      {/* Stats moved to where shape was - horizontal layout */}
+      <div className="flex justify-center gap-3 text-sm mb-2">
         <span title="Attack" className="flex items-center gap-1">
           <span className="text-red-500">⚔️</span>
-          <span className="text-sm font-bold text-gray-800">{piece.stats.attack}</span>
+          <span className="font-semibold text-gray-800">{piece.stats.attack}</span>
         </span>
         <span title="Health" className="flex items-center gap-1">
           <span className="text-green-500">❤️</span>
-          <span className="text-sm font-bold text-gray-800">{piece.stats.health}</span>
+          <span className="font-semibold text-gray-800">{piece.stats.health}</span>
         </span>
         <span title="Speed" className="flex items-center gap-1">
           <span className="text-blue-500">⚡</span>
-          <span className="text-sm font-bold text-gray-800">{piece.stats.speed}</span>
+          <span className="font-semibold text-gray-800">{piece.stats.speed}</span>
         </span>
       </div>
       
-      {piece.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2 justify-center">
-          {piece.tags.map((tag) => (
-            <span key={tag} className={`text-xs px-2 py-1 rounded ${getTypeColors ? getTypeColors(piece.type).tag : 'bg-gray-100 text-gray-700'}`} title={`Type: ${piece.type}`}>
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-      
       {onAction && (
         <button
-          className="view-abilities-button w-full py-2 px-3 rounded-md text-sm font-semibold transition-all bg-green-500 text-white hover:bg-green-600"
-          onMouseEnter={handleViewAbilitiesEnter}
-          onMouseLeave={handleViewAbilitiesLeave}
+          className="view-abilities-button w-full py-1.5 px-3 rounded-md text-xs font-semibold transition-all bg-green-500 text-white hover:bg-green-600"
+          onClick={onAction}
         >
-          View Abilities
+          {actionText || 'Info'}
         </button>
       )}
     </div>
