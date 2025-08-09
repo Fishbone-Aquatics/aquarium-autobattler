@@ -503,7 +503,7 @@ export function GameView() {
               gold={gameState.gold}
               onPurchase={purchasePiece}
               onReroll={rerollShop}
-              rerollCost={2}
+              rerollCost={2 + Math.max(0, (gameState.rerollsThisRound - 5) * 1)}
               nextInterest={Math.min(Math.floor(gameState.gold / 10), 5)}
               rerollsUsed={gameState.rerollsThisRound}
               lockedIndex={gameState.lockedShopIndex}

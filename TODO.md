@@ -21,13 +21,7 @@
 - **Solution**: Implement smarter AI that considers gold efficiency, loss streaks, and power spikes
 - **Files**: `game.service.ts` - `updateOpponentTank()` method
 
-### 3. Gold Transaction Tracker
-- **Issue**: No visibility into gold income/expense sources
-- **Impact**: Hard to understand economy, plan strategies
-- **Solution**: Create detailed gold history UI showing all transactions
-- **Files**: `GameView.tsx`, `Footer.tsx` or new component
-
-### 4. Equipment System Expansion
+### 3. Equipment System Expansion
 - **Issue**: Only Basic Filter exists, equipment underutilized  
 - **Impact**: Limited strategic options, equipment feels pointless
 - **Solution**: Add more equipment types with diverse effects
@@ -37,19 +31,14 @@
 
 ## 🔵 Medium Priority Fixes
 
-### 5. Equipment Respawn Issue
-- **Issue**: Equipment doesn't respawn after battles (only fish/plants do)
-- **Impact**: Equipment permanently lost after battle
-- **Solution**: Include equipment in respawn logic
-- **Files**: `game.service.ts` - `respawnPieces()` method
 
-### 6. Missing Items Investigation
+### 4. Missing Items Investigation
 - **Issue**: Some items seem missing from original piece library
 - **Impact**: Reduced content variety
 - **Solution**: Audit piece library, compare with design docs, add missing pieces
 - **Files**: `pieces.ts`
 
-### 7. Adjacency Bonus Tooltips
+### 5. Adjacency Bonus Tooltips
 - **Issue**: Tooltips don't show specific stat values from adjacency bonuses
 - **Impact**: Players can't see exact bonus amounts (+1 ATK, +2 HP, etc.)
 - **Solution**: Display numeric values in bonus descriptions
@@ -59,29 +48,14 @@
 
 ## 🟢 Low Priority Polish
 
-### 8. Battle Log UI Enhancement
+### 6. Battle Log UI Enhancement
 - **Issue**: Log section is tiny and hard to read
 - **Impact**: Poor UX for following combat details
 - **Solution**: Expand log area, better formatting, scroll controls
 - **Files**: `BattleView.tsx`
 
-### 9. Reset Game Shop Bug
-- **Issue**: Clicking Reset Game doesn't regenerate shop (requires 2g reroll)
-- **Impact**: Minor UX annoyance for new players
-- **Solution**: Auto-regenerate shop when clicking Reset Game.
-- **Files**: `Footer.tsx`, `game.service.ts`
 
-### 10. Water Quality Not Working
-- **Issue**: Water quality doesn't affect piece performance despite being tracked
-- **Impact**: Game mechanic completely non-functional, reduces strategic depth
-- **Solution**: Verify water quality bonuses are applied in battle calculations and adjacency effects
-- **Files**: `game.service.ts`, `calculatePieceStats()`, battle system
 
-### 11. Reroll Cost Scaling
-- **Issue**: Need to verify if reroll cost increases after X rerolls or rounds
-- **Impact**: Unknown if economy balancing mechanic is working
-- **Solution**: Check if reroll cost properly scales (2g → 4g → 6g etc.) and implement if missing
-- **Files**: `Shop.tsx`, `game.service.ts`, reroll logic
 
 ---
 
@@ -130,6 +104,11 @@
 - **Game End System** - Round 15 final battle UI and automatic campaign reset
 - **Sell Functionality** - 75% value sell buttons on placed pieces
 - **Real-time Battle Health Updates** - Health bars update after each individual attack
+- **Gold Transaction Tracker** - Modal-based transaction history with clickable header icon
+- **Equipment Respawn Fix** - Equipment now properly respawns after battles
+- **Equipment Attack Prevention** - Equipment no longer participates in attacks (passive only)
+- **Reroll Cost Scaling** - Rerolls cost 2g for first 5, then +1g per additional reroll
+- **Water Quality System** - Fish decrease quality (-1), plants increase (+1), damage bonuses/penalties at extremes, poison damage for dirty water
 - Multi-cell adjacency detection for all piece types
 - Equipment effects (filter +20% plant boost) 
 - Dead fish attack prevention fix

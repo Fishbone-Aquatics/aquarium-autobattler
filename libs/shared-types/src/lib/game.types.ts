@@ -37,13 +37,14 @@ export interface Tank {
   id: string;
   pieces: GamePiece[];
   waterQuality: number;
+  baseWaterQuality: number; // Original random starting quality (never changes)
   temperature: number;
   grid: (string | null)[][];
 }
 
 export interface BattleEvent {
   id: string;
-  type: 'attack' | 'heal' | 'status' | 'ability' | 'death' | 'round_start';
+  type: 'attack' | 'heal' | 'status' | 'ability' | 'death' | 'round_start' | 'damage';
   source: string;
   sourceName?: string;
   target?: string;

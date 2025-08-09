@@ -22,6 +22,8 @@ export class GameService {
     this.playerService.mapSocketToPlayer(socketId, playerId);
     
     // Create initial game state
+    const playerStartingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
+    const opponentStartingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
     const initialState: GameState = {
       phase: 'shop',
       round: 1,
@@ -35,14 +37,16 @@ export class GameService {
       playerTank: {
         id: playerId,
         pieces: [],
-        waterQuality: 5,
+        waterQuality: playerStartingQuality,
+        baseWaterQuality: playerStartingQuality, // Store original for calculations
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
       opponentTank: {
         id: 'opponent',
         pieces: [],
-        waterQuality: 5,
+        waterQuality: opponentStartingQuality,
+        baseWaterQuality: opponentStartingQuality, // Store original for calculations
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
@@ -125,6 +129,9 @@ export class GameService {
       pieceName: piece.name,
     });
 
+    // Recalculate water quality after adding new piece
+    gameState.playerTank.waterQuality = this.calculateWaterQuality(gameState.playerTank);
+
     this.updateGameState(socketId, gameState);
     return gameState;
   }
@@ -163,6 +170,9 @@ export class GameService {
       pieceName: piece.name,
     });
 
+    // Recalculate water quality after removing piece
+    gameState.playerTank.waterQuality = this.calculateWaterQuality(gameState.playerTank);
+
     this.updateGameState(socketId, gameState);
     return gameState;
   }
@@ -174,9 +184,14 @@ export class GameService {
       throw new BadRequestException('Can only reroll during shop phase');
     }
 
-    const rerollCost = 2;
+    // Calculate scaled reroll cost: base 2g, +1g per reroll after 5th
+    const baseRerollCost = 2;
+    const freeRerolls = 5;
+    const extraCostPerReroll = 1;
+    const rerollCost = baseRerollCost + Math.max(0, (gameState.rerollsThisRound - freeRerolls) * extraCostPerReroll);
+    
     if (gameState.gold < rerollCost) {
-      throw new BadRequestException('Insufficient gold for reroll');
+      throw new BadRequestException(`Insufficient gold for reroll (costs ${rerollCost}g)`);
     }
 
     // Deduct gold
@@ -192,7 +207,7 @@ export class GameService {
       round: gameState.round,
       type: 'reroll',
       amount: -rerollCost,
-      description: 'Shop reroll',
+      description: `Shop reroll (${gameState.rerollsThisRound}${gameState.rerollsThisRound === 1 ? 'st' : gameState.rerollsThisRound === 2 ? 'nd' : gameState.rerollsThisRound === 3 ? 'rd' : 'th'} this round)`,
       timestamp: Date.now(),
     });
 
@@ -235,6 +250,9 @@ export class GameService {
       piece.position = position;
       this.placePieceOnGrid(gameState.playerTank, piece);
     }
+
+    // Recalculate water quality after placing/moving/removing pieces
+    gameState.playerTank.waterQuality = this.calculateWaterQuality(gameState.playerTank);
 
     this.updateGameState(socketId, gameState);
     return gameState;
@@ -430,6 +448,8 @@ export class GameService {
     const playerId = this.playerService.getPlayerIdFromSocket(socketId);
     
     // Create fresh game state (same as initial creation)
+    const playerStartingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
+    const opponentStartingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
     const resetState: GameState = {
       phase: 'shop',
       round: 1,
@@ -443,14 +463,16 @@ export class GameService {
       playerTank: {
         id: playerId,
         pieces: [],
-        waterQuality: 5,
+        waterQuality: playerStartingQuality,
+        baseWaterQuality: playerStartingQuality, // Store original for calculations
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
       opponentTank: {
         id: 'opponent',
         pieces: [],
-        waterQuality: 5,
+        waterQuality: opponentStartingQuality,
+        baseWaterQuality: opponentStartingQuality, // Store original for calculations
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
@@ -641,10 +663,65 @@ export class GameService {
     battleState.events.push(roundEvent);
     turnEvents.push(roundEvent);
 
-    // Get all alive pieces from both sides (excluding plants - they don't attack)
+    // Apply poison damage for dirty water at start of turn (quality 1-3)
+    if (gameState.playerTank.waterQuality <= 3) {
+      const poisonedFish = battleState.playerPieces.filter(p => !p.isDead && p.type === 'fish');
+      for (const fish of poisonedFish) {
+        const poisonDamage = 1; // Fixed poison damage
+        fish.currentHealth = Math.max(0, fish.currentHealth - poisonDamage);
+        const fishDied = fish.currentHealth === 0;
+        if (fishDied) {
+          fish.isDead = true;
+        }
+
+        const poisonEvent: BattleEvent = {
+          id: uuidv4(),
+          type: 'damage',
+          source: 'poison',
+          targetName: fish.name,
+          value: poisonDamage,
+          round: battleState.currentRound,
+          turn: battleState.currentTurn,
+          timestamp: Date.now(),
+          description: `☠️ ${fish.name} takes ${poisonDamage} poison damage from dirty water (Quality ${gameState.playerTank.waterQuality})${fishDied ? ' and dies!' : ` → ${fish.currentHealth}/${fish.stats.maxHealth} HP left`}`,
+        };
+
+        battleState.events.push(poisonEvent);
+        turnEvents.push(poisonEvent);
+      }
+    }
+
+    if (gameState.opponentTank.waterQuality <= 3) {
+      const poisonedFish = battleState.opponentPieces.filter(p => !p.isDead && p.type === 'fish');
+      for (const fish of poisonedFish) {
+        const poisonDamage = 1; // Fixed poison damage
+        fish.currentHealth = Math.max(0, fish.currentHealth - poisonDamage);
+        const fishDied = fish.currentHealth === 0;
+        if (fishDied) {
+          fish.isDead = true;
+        }
+
+        const poisonEvent: BattleEvent = {
+          id: uuidv4(),
+          type: 'damage',
+          source: 'poison',
+          targetName: fish.name,
+          value: poisonDamage,
+          round: battleState.currentRound,
+          turn: battleState.currentTurn,
+          timestamp: Date.now(),
+          description: `☠️ ${fish.name} takes ${poisonDamage} poison damage from dirty water (Quality ${gameState.opponentTank.waterQuality})${fishDied ? ' and dies!' : ` → ${fish.currentHealth}/${fish.stats.maxHealth} HP left`}`,
+        };
+
+        battleState.events.push(poisonEvent);
+        turnEvents.push(poisonEvent);
+      }
+    }
+
+    // Get all alive pieces from both sides (only fish can attack - plants and equipment are passive)
     const alivePieces: BattlePieceWithTeam[] = [
-      ...battleState.playerPieces.filter(p => !p.isDead && p.type !== 'plant').map(p => ({ ...p, team: 'player' as const })),
-      ...battleState.opponentPieces.filter(p => !p.isDead && p.type !== 'plant').map(p => ({ ...p, team: 'opponent' as const }))
+      ...battleState.playerPieces.filter(p => !p.isDead && p.type === 'fish').map(p => ({ ...p, team: 'player' as const })),
+      ...battleState.opponentPieces.filter(p => !p.isDead && p.type === 'fish').map(p => ({ ...p, team: 'opponent' as const }))
     ];
 
     // Skip turn if no attacking pieces left on either side
@@ -716,8 +793,19 @@ export class GameService {
       const baseDamage = originalPiece?.stats.attack || attacker.stats.attack;
       const attackBonus = attacker.stats.attack - baseDamage; // Calculate bonus from adjacency/schooling
       const waterQuality = attacker.team === 'player' ? gameState.playerTank.waterQuality : gameState.opponentTank.waterQuality;
-      const waterBonus = Math.floor(attacker.stats.attack * (waterQuality / 10) * 0.1); // 10% bonus per water quality point
-      const finalDamage = attacker.stats.attack + waterBonus;
+      
+      // Water quality damage modifiers
+      let waterMultiplier = 1.0; // Default no bonus/penalty
+      if (waterQuality >= 8) {
+        waterMultiplier = 1.3; // +30% damage for excellent water (8-10)
+      } else if (waterQuality <= 3) {
+        waterMultiplier = 0.7; // -30% damage for poor water (1-3)
+      }
+      
+      const baseAttackDamage = attacker.stats.attack;
+      const waterModifiedDamage = Math.floor(baseAttackDamage * waterMultiplier);
+      const waterBonus = waterModifiedDamage - baseAttackDamage; // Show the actual bonus/penalty
+      const finalDamage = waterModifiedDamage;
 
       // Find the actual battleState piece to update (not the local copy)
       const battleStatePieces = target.team === 'player' 
@@ -775,7 +863,7 @@ export class GameService {
         round: battleState.currentRound,
         turn: battleState.currentTurn,
         timestamp: Date.now(),
-        description: `${attacker.team === 'player' ? '🟢' : '🔴'} ${attacker.name} (Speed ${attacker.stats.speed}) attacks ${target.team === 'player' ? '🟢' : '🔴'} ${target.name}! ${baseDamage} base attack${attackBonus > 0 ? ` + ${attackBonus} bonuses` : ''}${waterBonus > 0 ? ` + ${waterBonus} water quality` : ''} = ${finalDamage} damage → ${target.name} ${targetDied ? 'is KO\'d!' : `has ${battlePiece.currentHealth}/${battlePiece.stats.maxHealth} HP left`}`,
+        description: `${attacker.team === 'player' ? '🟢' : '🔴'} ${attacker.name} (Speed ${attacker.stats.speed}) attacks ${target.team === 'player' ? '🟢' : '🔴'} ${target.name}! ${baseDamage} base attack${attackBonus > 0 ? ` + ${attackBonus} bonuses` : ''}${waterBonus !== 0 ? (waterBonus > 0 ? ` + ${waterBonus} water quality` : ` - ${Math.abs(waterBonus)} water quality`) : ''} = ${finalDamage} damage → ${target.name} ${targetDied ? 'is KO\'d!' : `has ${battlePiece.currentHealth}/${battlePiece.stats.maxHealth} HP left`}`,
         // Include real-time health states for frontend updates (using immediately calculated values)
         healthStates: {
           playerHealth: currentPlayerHealth,
@@ -844,7 +932,7 @@ export class GameService {
     this.playerService.updateSession(playerId, gameState);
   }
 
-  private generateShop(existingShop?: (GamePiece | null)[], lockedIndex?: number | null): (GamePiece | null)[] {
+  public generateShop(existingShop?: (GamePiece | null)[], lockedIndex?: number | null): (GamePiece | null)[] {
     const shopSize = 6;
     const shop: (GamePiece | null)[] = [];
     
@@ -1017,10 +1105,48 @@ export class GameService {
     tank.pieces = tank.pieces.filter(p => p.type !== 'consumable' || !p.position);
   }
 
-  private respawnPieces(tank: Tank): void {
-    // Respawn all fish and plants, preserving their permanent bonuses
+  private calculateWaterQuality(tank: Tank): number {
+    // Start with the tank's original baseline quality (never changes)
+    let quality = tank.baseWaterQuality;
+    
+    // Count placed pieces and calculate the total effect
+    let totalEffect = 0;
+    let fishCount = 0;
+    let plantCount = 0;
+    let filterCount = 0;
+    
     for (const piece of tank.pieces) {
-      if (piece.type === 'fish' || piece.type === 'plant') {
+      if (!piece.position) continue; // Only count placed pieces
+      
+      
+      if (piece.type === 'fish') {
+        totalEffect -= 1; // Fish decrease quality
+        fishCount++;
+      } else if (piece.type === 'plant') {
+        totalEffect += 1; // Plants increase quality
+        plantCount++;
+      } else if (piece.type === 'equipment') {
+        // Most equipment is neutral, but check for special items
+        if (piece.name === 'Sponge Filter' || piece.tags?.includes('filter')) {
+          totalEffect += 1; // Filters improve quality
+          filterCount++;
+        }
+      }
+    }
+    
+    
+    // Apply the effect to the starting quality
+    quality += totalEffect;
+    
+    
+    // Clamp quality between 1-10
+    return Math.max(1, Math.min(10, quality));
+  }
+
+  private respawnPieces(tank: Tank): void {
+    // Respawn all non-consumable pieces (fish, plants, equipment), preserving their permanent bonuses
+    for (const piece of tank.pieces) {
+      if (piece.type === 'fish' || piece.type === 'plant' || piece.type === 'equipment') {
         // Clear the dead flag
         (piece as any).isDead = false;
         
@@ -1243,6 +1369,9 @@ export class GameService {
     
     console.log(`🤖 Opponent tank updated: ${opponentTank.pieces.length} total pieces, ${opponentGold} gold remaining`);
     
+    // Recalculate water quality after updating opponent tank
+    gameState.opponentTank.waterQuality = this.calculateWaterQuality(gameState.opponentTank);
+    
     return { remainingGold: opponentGold };
   }
 
@@ -1322,13 +1451,18 @@ export class GameService {
 
     console.log(`🤖 Opponent tank generated: ${pieceCount} pieces, ${opponentGold} gold remaining`);
     
+    const startingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
     const tank = {
       id: 'opponent',
       pieces: opponentPieces,
-      waterQuality: Math.floor(Math.random() * 6) + 3, // 3-8
+      waterQuality: startingQuality,
+      baseWaterQuality: startingQuality, // Store original for calculations
       temperature: 25,
       grid,
     };
+
+    // Calculate proper water quality based on placed pieces
+    tank.waterQuality = this.calculateWaterQuality(tank);
     
     return {
       tank,
@@ -1437,13 +1571,13 @@ export class GameService {
       
       battleState.events.push(roundEvent);
 
-      // Simple damage calculation
+      // Simple damage calculation (only fish can attack)
       const playerDamage = battleState.playerPieces
-        .filter(p => !p.isDead)
+        .filter(p => !p.isDead && p.type === 'fish')
         .reduce((sum, p) => sum + p.stats.attack, 0);
       
       const opponentDamage = battleState.opponentPieces
-        .filter(p => !p.isDead)
+        .filter(p => !p.isDead && p.type === 'fish')
         .reduce((sum, p) => sum + p.stats.attack, 0);
 
       // Apply damage

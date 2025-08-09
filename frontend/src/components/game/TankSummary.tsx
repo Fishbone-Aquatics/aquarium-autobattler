@@ -3,6 +3,16 @@
 import React from 'react';
 import { TankAnalysis } from '../../utils/tankAnalysis';
 
+// Helper function to get water quality damage bonus text
+const getWaterQualityBonus = (waterQuality: number) => {
+  if (waterQuality >= 8) {
+    return { text: '+30%', color: 'text-green-500', bgColor: 'bg-green-100' };
+  } else if (waterQuality <= 3) {
+    return { text: '-30%', color: 'text-red-500', bgColor: 'bg-red-100' };
+  }
+  return null;
+};
+
 interface TankSummaryProps {
   analysis: TankAnalysis;
   waterQuality: number;
@@ -16,6 +26,8 @@ export const TankSummary: React.FC<TankSummaryProps> = ({
   showDetailed = true,
   className = ""
 }) => {
+  const waterBonus = getWaterQualityBonus(waterQuality);
+  
   return (
     <div className={`p-2 bg-gradient-to-r from-blue-50 to-teal-50 rounded-lg border border-blue-200 relative group ${className}`}>
       <h3 className="font-bold text-gray-900 mb-2 text-sm">Tank Summary</h3>
@@ -24,6 +36,11 @@ export const TankSummary: React.FC<TankSummaryProps> = ({
           <div className="text-lg font-bold text-red-600 cursor-help flex items-center justify-center gap-1">
             <span>{analysis.baseAttack}</span>
             {analysis.bonusAttack > 0 && <span className="text-green-500">(+{analysis.bonusAttack})</span>}
+            {waterBonus && (
+              <span className={`text-xs px-1 py-0.5 rounded-full ${waterBonus.bgColor} ${waterBonus.color} font-bold`} title="Water Quality Damage Bonus">
+                {waterBonus.text}
+              </span>
+            )}
           </div>
           <div className="text-gray-600 text-xs">Total Attack</div>
         </div>

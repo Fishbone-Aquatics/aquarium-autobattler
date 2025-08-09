@@ -5,6 +5,16 @@ import { Tank } from '@aquarium/shared-types';
 import { TankAnalysis } from '../../utils/tankAnalysis';
 import { Swords, Heart, Zap, Droplets, Thermometer } from 'lucide-react';
 
+// Helper function to get water quality damage bonus text
+const getWaterQualityBonus = (waterQuality: number) => {
+  if (waterQuality >= 8) {
+    return { text: '+30%', color: 'text-green-500', bgColor: 'bg-green-100' };
+  } else if (waterQuality <= 3) {
+    return { text: '-30%', color: 'text-red-500', bgColor: 'bg-red-100' };
+  }
+  return null;
+};
+
 interface StatComparisonProps {
   playerAnalysis: TankAnalysis;
   opponentAnalysis: TankAnalysis;
@@ -20,6 +30,9 @@ interface StatRowProps {
   playerBonus?: number;
   opponentBonus?: number;
   formatValue?: (value: number) => string;
+  playerWaterQuality?: number;
+  opponentWaterQuality?: number;
+  showWaterQuality?: boolean;
 }
 
 function StatRow({ 
@@ -29,22 +42,33 @@ function StatRow({
   opponentValue, 
   playerBonus = 0, 
   opponentBonus = 0,
-  formatValue = (v) => v.toString()
+  formatValue = (v) => v.toString(),
+  playerWaterQuality,
+  opponentWaterQuality,
+  showWaterQuality = false
 }: StatRowProps) {
   const playerTotal = playerValue + playerBonus;
   const opponentTotal = opponentValue + opponentBonus;
   const advantage = playerTotal > opponentTotal ? 'player' : 
                    opponentTotal > playerTotal ? 'opponent' : 'tie';
 
+  const playerWaterBonus = showWaterQuality && playerWaterQuality ? getWaterQualityBonus(playerWaterQuality) : null;
+  const opponentWaterBonus = showWaterQuality && opponentWaterQuality ? getWaterQualityBonus(opponentWaterQuality) : null;
+
   return (
     <div className="grid grid-cols-7 items-center gap-4 py-3 border-b border-gray-200">
       {/* Player Stats */}
       <div className={`col-span-2 text-right ${advantage === 'player' ? 'font-bold text-green-600' : 'text-gray-700'}`}>
-        <div className="text-lg">
+        <div className="text-lg flex items-center justify-end gap-1">
           {formatValue(playerTotal)}
           {playerBonus > 0 && (
             <span className="text-sm text-green-500 ml-1">
               (+{playerBonus})
+            </span>
+          )}
+          {playerWaterBonus && (
+            <span className={`text-xs px-1 py-0.5 rounded-full ${playerWaterBonus.bgColor} ${playerWaterBonus.color} font-bold`} title="Water Quality Damage Bonus">
+              {playerWaterBonus.text}
             </span>
           )}
         </div>
@@ -83,11 +107,16 @@ function StatRow({
 
       {/* Opponent Stats */}
       <div className={`col-span-2 text-left ${advantage === 'opponent' ? 'font-bold text-red-600' : 'text-gray-700'}`}>
-        <div className="text-lg">
+        <div className="text-lg flex items-center gap-1">
           {formatValue(opponentTotal)}
           {opponentBonus > 0 && (
             <span className="text-sm text-green-500 ml-1">
               (+{opponentBonus})
+            </span>
+          )}
+          {opponentWaterBonus && (
+            <span className={`text-xs px-1 py-0.5 rounded-full ${opponentWaterBonus.bgColor} ${opponentWaterBonus.color} font-bold`} title="Water Quality Damage Bonus">
+              {opponentWaterBonus.text}
             </span>
           )}
         </div>
@@ -191,6 +220,9 @@ export function StatComparison({ playerAnalysis, opponentAnalysis, playerTank, o
           opponentValue={opponentAnalysis.baseAttack}
           playerBonus={playerAnalysis.bonusAttack}
           opponentBonus={opponentAnalysis.bonusAttack}
+          playerWaterQuality={playerTank.waterQuality}
+          opponentWaterQuality={opponentTank.waterQuality}
+          showWaterQuality={true}
         />
 
         <StatRow

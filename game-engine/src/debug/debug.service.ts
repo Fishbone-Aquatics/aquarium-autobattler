@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PlayerService } from '../player/player.service';
+import { GameService } from '../game/game.service';
 
 @Injectable()
 export class DebugService {
-  constructor(private playerService: PlayerService) {}
+  constructor(
+    private playerService: PlayerService,
+    private gameService: GameService
+  ) {}
 
   /**
    * Get all active sessions for debugging
@@ -98,18 +102,20 @@ export class DebugService {
       playerTank: {
         id: playerId,
         pieces: [],
-        waterQuality: 5,
+        waterQuality: 7, // Debug default
+        baseWaterQuality: 7, // Debug default
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
       opponentTank: {
         id: 'opponent',
         pieces: [],
-        waterQuality: 5,
+        waterQuality: 7, // Debug default
+        baseWaterQuality: 7, // Debug default
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
-      shop: [],
+      shop: this.gameService.generateShop(),
       battleEvents: [],
       selectedPiece: null,
       opponentGold: 10,

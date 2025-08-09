@@ -57,9 +57,15 @@ export function Shop({
               ? 'bg-white/20 hover:bg-white/30 backdrop-blur-sm'
               : 'bg-white/10 text-white/50 cursor-not-allowed'
           }`}
+          title={rerollsUsed >= 5 ? `Cost increases after 5 rerolls (+1g per reroll)` : `${5 - rerollsUsed} rerolls left at 2g`}
         >
           <RefreshCw size={16} />
           Reroll {rerollCost}g
+          {rerollsUsed >= 5 && (
+            <span className="text-xs text-yellow-300 ml-1">
+              (+{rerollsUsed - 5})
+            </span>
+          )}
         </button>
       </div>
       
@@ -72,6 +78,11 @@ export function Shop({
           {nextInterest > 0 && (
             <div className="text-yellow-200">
               Next: +{nextInterest}g interest
+            </div>
+          )}
+          {rerollsUsed > 0 && (
+            <div className="text-white/70">
+              Rerolls: {rerollsUsed}
             </div>
           )}
         </div>
