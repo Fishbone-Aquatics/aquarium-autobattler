@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { GamePiece, Position } from '@aquarium/shared-types';
 import { analyzeTank } from '../../utils/tankAnalysis';
 import { PLANT_BONUSES, SCHOOLING_BONUSES, getPieceBonuses } from '../../utils/bonusConfig';
+import { GoldTrackerModal } from '../ui/GoldTrackerModal';
 
 // Type-based color mapping
 const getTypeColors = (type: string) => {
@@ -57,6 +58,7 @@ export function GameView() {
   const [synergyBonuses, setSynergyBonuses] = useState<string[]>([]);
   const [pendingPlacement, setPendingPlacement] = useState<{piece: GamePiece, position: Position} | null>(null);
   const [mousePosition, setMousePosition] = useState<{x: number, y: number}>({x: 0, y: 0});
+  const [isGoldTrackerOpen, setIsGoldTrackerOpen] = useState(false);
 
   const handleDragStart = (piece: GamePiece) => {
     console.log('🚀 DRAG START:', piece.name, 'with shape:', piece.shape);
@@ -325,6 +327,7 @@ export function GameView() {
         losses={gameState.losses}
         lossStreak={gameState.lossStreak}
         opponentLossStreak={gameState.opponentLossStreak}
+        onOpenGoldTracker={() => setIsGoldTrackerOpen(true)}
       />
 
       <main className="flex-1 container mx-auto px-4 py-6">
@@ -695,6 +698,14 @@ export function GameView() {
       </main>
 
       <Footer phase={gameState.phase} waterQuality={gameState.playerTank.waterQuality} />
+      
+      {/* Gold Tracker Modal */}
+      <GoldTrackerModal
+        goldHistory={gameState.goldHistory}
+        currentGold={gameState.gold}
+        isOpen={isGoldTrackerOpen}
+        onClose={() => setIsGoldTrackerOpen(false)}
+      />
     </div>
   );
 }

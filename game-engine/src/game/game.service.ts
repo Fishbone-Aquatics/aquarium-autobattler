@@ -300,17 +300,31 @@ export class GameService {
     const playerBaseReward = 5;
     const playerWinBonus = (battleResult.winner === 'player' || battleResult.winner === 'draw') ? 3 : 0;
     const playerLossStreakBonus = Math.min(gameState.lossStreak, 3);
-    const playerTotalReward = playerBaseReward + playerWinBonus + playerLossStreakBonus;
+    const playerBaseAndWin = playerBaseReward + playerWinBonus;
 
-    gameState.gold += playerTotalReward;
+    // Add base battle reward
+    gameState.gold += playerBaseAndWin;
     gameState.goldHistory.push({
       id: uuidv4(),
       round: gameState.round,
       type: 'battle_reward',
-      amount: playerTotalReward,
-      description: `Battle ${battleResult.winner === 'player' ? 'won' : battleResult.winner === 'draw' ? 'tied' : 'lost'}`,
+      amount: playerBaseAndWin,
+      description: `Battle ${battleResult.winner === 'player' ? 'won (+3 bonus)' : battleResult.winner === 'draw' ? 'tied (+3 bonus)' : 'lost'} (+5 base)`,
       timestamp: Date.now(),
     });
+
+    // Add separate loss streak bonus if applicable  
+    if (playerLossStreakBonus > 0) {
+      gameState.gold += playerLossStreakBonus;
+      gameState.goldHistory.push({
+        id: uuidv4(),
+        round: gameState.round,
+        type: 'loss_streak_bonus',
+        amount: playerLossStreakBonus,
+        description: `Loss streak bonus (${gameState.lossStreak} ${gameState.lossStreak === 1 ? 'loss' : 'losses'})`,
+        timestamp: Date.now(),
+      });
+    }
 
     // Calculate opponent rewards (same mechanics as player)
     const opponentBaseReward = 5;
@@ -360,7 +374,7 @@ export class GameService {
     return {
       winner: battleResult.winner,
       rewards: {
-        playerGold: playerTotalReward,
+        playerGold: playerBaseAndWin + playerLossStreakBonus,
         playerInterest,
         opponentGold: opponentTotalReward,
         opponentInterest,

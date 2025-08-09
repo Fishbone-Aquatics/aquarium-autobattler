@@ -8,6 +8,7 @@ import { TankGrid } from './TankGrid';
 import { StatComparison } from './StatComparison';
 import { BattleLog } from './BattleLog';
 import { GameState, GamePiece, BattleState, BattleEvent } from '@aquarium/shared-types';
+import { GoldTrackerModal } from '../ui/GoldTrackerModal';
 import { analyzeTank } from '../../utils/tankAnalysis';
 import { Swords, Play, RotateCcw } from 'lucide-react';
 
@@ -58,6 +59,7 @@ export function BattleView({ gameState }: BattleViewProps) {
   const [hoveredPiece, setHoveredPiece] = useState<GamePiece | null>(null);
   const [highlightedPieceId, setHighlightedPieceId] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState<{x: number, y: number}>({x: 0, y: 0});
+  const [isGoldTrackerOpen, setIsGoldTrackerOpen] = useState(false);
 
   // Calculate tank analyses
   const playerAnalysis = analyzeTank(gameState.playerTank.pieces);
@@ -124,6 +126,7 @@ export function BattleView({ gameState }: BattleViewProps) {
           losses={gameState.losses}
           lossStreak={gameState.lossStreak}
           opponentLossStreak={gameState.opponentLossStreak}
+          onOpenGoldTracker={() => setIsGoldTrackerOpen(true)}
         />
         
         <main className="flex-1 container mx-auto px-4 py-6">
@@ -446,6 +449,14 @@ export function BattleView({ gameState }: BattleViewProps) {
         </main>
         
         <Footer phase={gameState.phase} waterQuality={gameState.playerTank.waterQuality} />
+        
+        {/* Gold Tracker Modal */}
+        <GoldTrackerModal
+          goldHistory={gameState.goldHistory}
+          currentGold={gameState.gold}
+          isOpen={isGoldTrackerOpen}
+          onClose={() => setIsGoldTrackerOpen(false)}
+        />
       </div>
     );
   }

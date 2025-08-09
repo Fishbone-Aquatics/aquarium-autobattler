@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Fish, Waves } from 'lucide-react';
+import { Fish, Waves, BarChart3 } from 'lucide-react';
 
 interface HeaderProps {
   gold: number;
@@ -11,6 +11,7 @@ interface HeaderProps {
   losses: number;
   lossStreak: number;
   opponentLossStreak: number;
+  onOpenGoldTracker?: () => void;
 }
 
 export function Header({
@@ -21,6 +22,7 @@ export function Header({
   losses,
   lossStreak,
   opponentLossStreak,
+  onOpenGoldTracker,
 }: HeaderProps) {
   const nextInterest = Math.min(Math.floor(gold / 10), 5);
   const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0;
@@ -43,7 +45,11 @@ export function Header({
           </div>
           
           <div className="flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-1 rounded-full font-bold">
+            <button
+              onClick={onOpenGoldTracker}
+              className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-1 rounded-full font-bold hover:from-yellow-500 hover:to-orange-500 transition-all cursor-pointer group relative"
+              title="Click to view gold transaction history"
+            >
               <span>💰</span>
               <span>{gold}g</span>
               {nextInterest > 0 && (
@@ -56,7 +62,8 @@ export function Header({
                   (L{lossStreak})
                 </span>
               )}
-            </div>
+              <BarChart3 className="w-3 h-3 ml-1 opacity-70 group-hover:opacity-100 transition-opacity" />
+            </button>
             
             <div className="flex items-center gap-2 bg-gradient-to-r from-red-400 to-pink-400 text-white px-3 py-1 rounded-full font-bold">
               <span>🤖</span>
