@@ -19,7 +19,10 @@
       "Bash(npx nx lint:*)",
       "Bash(curl:*)",
       "Bash(timeout 15s npm run start:backend)",
-      "Bash(timeout 15s npm run start:frontend)"
+      "Bash(timeout 15s npm run start:frontend)",
+      "Bash(./start.ps1)",
+      "WebFetch(domain:localhost)",
+      "WebFetch(domain:cdn.discordapp.com)"
     ],
     "deny": []
   }

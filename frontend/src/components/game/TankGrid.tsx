@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { GamePiece, Position } from '@aquarium/shared-types';
+import { GamePiece, Position, BattlePiece } from '@aquarium/shared-types';
 import { PLANT_BONUSES, SCHOOLING_BONUSES, getPieceBonuses } from '../../utils/bonusConfig';
 
 interface TankGridProps {
@@ -16,6 +16,8 @@ interface TankGridProps {
   highlightedPieceId?: string | null;
   onPieceHover?: (piece: GamePiece | null) => void;
   getTypeColors?: (type: string) => { grid: string; border: string; tag: string; tagActive: string };
+  gamePhase?: string;
+  battlePieces?: BattlePiece[];
 }
 
 export function TankGrid({
@@ -30,6 +32,8 @@ export function TankGrid({
   highlightedPieceId,
   onPieceHover,
   getTypeColors,
+  gamePhase,
+  battlePieces,
 }: TankGridProps) {
   const [draggedPiece, setDraggedPiece] = useState<GamePiece | null>(null);
   const [validDropPositions, setValidDropPositions] = useState<Position[]>([]);
@@ -235,7 +239,7 @@ export function TankGrid({
                           ? 'ring-4 ring-yellow-400 ring-opacity-75 scale-110 shadow-2xl z-10' 
                           : ''
                       } ${
-                        (piece as any).isDead 
+                        (piece as any).isDead || (gamePhase === 'battle' && battlePieces && battlePieces.find(bp => bp.id === piece.id)?.currentHealth === 0)
                           ? 'opacity-50 grayscale saturate-0' 
                           : 'cursor-pointer hover:scale-105'
                       }`}
@@ -248,7 +252,7 @@ export function TankGrid({
                       {/* Only show text on the origin cell */}
                       {piece.position!.x === x && piece.position!.y === y && (
                         <div className="text-center pointer-events-none">
-                          {(piece as any).isDead ? (
+                          {(piece as any).isDead || (gamePhase === 'battle' && battlePieces && battlePieces.find(bp => bp.id === piece.id)?.currentHealth === 0) ? (
                             <div className="text-center">
                               <div className="text-xs font-bold text-red-300">{piece.name.split(' ')[0]}</div>
                               <div className="text-red-400 text-lg">💀</div>
@@ -351,11 +355,26 @@ export function TankGrid({
                               const finalAttack = piece.stats.attack + attackBonus;
                               const finalHealth = piece.stats.health + healthBonus;
                               
+                              // During battle phase, show current values from battle pieces
+                              let displayAttack = finalAttack;
+                              let displayHealth = finalHealth;
+                              if (gamePhase === 'battle' && battlePieces) {
+                                const battlePiece = battlePieces.find(bp => bp.id === piece.id);
+                                if (battlePiece) {
+                                  if (battlePiece.currentHealth !== undefined) {
+                                    displayHealth = battlePiece.currentHealth; // Current HP from battle state
+                                  }
+                                  if (battlePiece.stats.attack !== undefined) {
+                                    displayAttack = battlePiece.stats.attack; // Current buffed attack from battle state
+                                  }
+                                }
+                              }
+                              
                               return (
                                 <div className="text-center">
                                   <div className="text-xs font-bold">{piece.name.split(' ')[0]}</div>
                                   <div className="text-[10px]">
-                                    {finalAttack}/{finalHealth}
+                                    {displayAttack}/{displayHealth}
                                   </div>
                                 </div>
                               );

@@ -1037,11 +1037,40 @@ export class GameService {
     return pieces[Math.floor(Math.random() * pieces.length)] || null;
   }
 
-  private getOpponentPieceForRound(round: number, maxCost: number): GamePiece | null {
+  private getOpponentPieceForRound(round: number, maxCost: number, currentWaterQuality: number, lossStreak: number): GamePiece | null {
     const pieces = [...PIECE_LIBRARY].filter(piece => piece.cost <= maxCost);
     
     if (pieces.length === 0) return null;
     
+    // Water quality considerations - prioritize based on current state
+    const isInToxicWater = currentWaterQuality <= 3; // Poison damage range
+    const isInGoodWater = currentWaterQuality >= 8; // Damage bonus range
+    const needsWaterQualityHelp = isInToxicWater || (lossStreak >= 2 && currentWaterQuality < 7);
+    
+    // If in toxic water or losing and need help, prioritize water quality improvers
+    if (needsWaterQualityHelp) {
+      const waterQualityPieces = pieces.filter(piece => 
+        piece.type === 'plant' || (piece.type === 'equipment' && piece.tags.includes('filter'))
+      );
+      if (waterQualityPieces.length > 0) {
+        // 80% chance to buy water quality pieces when water quality is bad
+        if (Math.random() < 0.8) {
+          console.log(`🤖 💧 Water quality ${currentWaterQuality} is bad, prioritizing plants/filters`);
+          return waterQualityPieces[Math.floor(Math.random() * waterQualityPieces.length)];
+        }
+      }
+    }
+    
+    // If in good water, prioritize fish to maximize damage bonus
+    if (isInGoodWater) {
+      const fish = pieces.filter(piece => piece.type === 'fish');
+      if (fish.length > 0 && Math.random() < 0.6) {
+        console.log(`🤖 💧 Water quality ${currentWaterQuality} is good, prioritizing fish`);
+        return fish[Math.floor(Math.random() * fish.length)];
+      }
+    }
+    
+    // Normal piece selection logic with cost-based preferences
     // Early rounds (1-3): Random selection
     if (round <= 3) {
       return pieces[Math.floor(Math.random() * pieces.length)];
@@ -1376,36 +1405,44 @@ export class GameService {
     const round = gameState.round;
     let opponentGold = gameState.opponentGold;
     const opponentTank = gameState.opponentTank;
+    const lossStreak = gameState.opponentLossStreak;
+    const winStreak = gameState.opponentWinStreak;
     
-    console.log(`🤖 Updating opponent tank for round ${round} with ${opponentGold} gold`);
+    console.log(`🤖 Updating opponent tank for round ${round} with ${opponentGold} gold (L${lossStreak} W${winStreak})`);
     console.log(`🤖 Current opponent pieces: ${opponentTank.pieces.length}`);
     
-    // Calculate how many new pieces to buy this round
-    const currentPieceCount = opponentTank.pieces.length;
+    // Smart gold spending decisions
+    let spendingBudget = this.calculateOpponentSpendingBudget(opponentGold, round, lossStreak, winStreak);
+    console.log(`🤖 Spending budget: ${spendingBudget}g out of ${opponentGold}g available`);
     
-    // Scale target pieces with round progression, but don't exceed grid capacity
-    const targetPieces = Math.min(8, Math.max(1, Math.floor(round * 0.7) + 2));
-    const piecesToBuy = Math.max(0, targetPieces - currentPieceCount);
+    // Crisis mode: if losing badly with lots of gold, spend aggressively
+    const isInCrisis = lossStreak >= 3 && spendingBudget > 20;
+    const isLateGameDesperate = round >= 10 && lossStreak >= 2 && spendingBudget > 15;
     
-    console.log(`🤖 Target pieces: ${targetPieces}, Current: ${currentPieceCount}, To buy: ${piecesToBuy}`);
+    console.log(`🤖 Crisis mode: ${isInCrisis}, Late game desperate: ${isLateGameDesperate}`);
     
     let piecesBought = 0;
     let consecutiveFailures = 0;
-    const maxConsecutiveFailures = 15;
+    const maxConsecutiveFailures = 25; // More attempts when desperate
     
-    // Buy new pieces for this round
-    while (opponentGold > 0 && piecesBought < piecesToBuy && consecutiveFailures < maxConsecutiveFailures) {
+    // Spend until budget exhausted or can't find valid pieces/positions
+    while (spendingBudget > 0 && consecutiveFailures < maxConsecutiveFailures) {
       const piece = typeof this.getOpponentPieceForRound === 'function' 
-        ? this.getOpponentPieceForRound(round, opponentGold)
+        ? this.getOpponentPieceForRound(round, spendingBudget, opponentTank.waterQuality, lossStreak)
         : this.getRandomPiece();
       
-      if (!piece || piece.cost > opponentGold) {
+      if (!piece || piece.cost > spendingBudget) {
         consecutiveFailures++;
         continue;
       }
       
-      // Find a valid position for the new piece
-      const position = this.findValidPositionForOpponent(opponentTank, piece);
+      // Find optimal position for the new piece
+      let position: Position | null;
+      if (piece.type === 'consumable') {
+        position = this.findOptimalConsumablePosition(opponentTank, piece);
+      } else {
+        position = this.findValidPositionForOpponent(opponentTank, piece);
+      }
       
       if (position) {
         const newPiece = { 
@@ -1420,14 +1457,31 @@ export class GameService {
         // Add to pieces array
         opponentTank.pieces.push(newPiece);
         opponentGold -= piece.cost;
+        spendingBudget -= piece.cost;
         piecesBought++;
         consecutiveFailures = 0;
         
         console.log(`🤖 Bought ${piece.name} for ${piece.cost}g at (${position.x},${position.y})`);
+      } else if (isInCrisis || isLateGameDesperate) {
+        // Try to replace a weaker piece if we're desperate and grid is full
+        const replacedPiece = this.tryReplaceWeakerPiece(opponentTank, piece, spendingBudget);
+        if (replacedPiece) {
+          opponentGold -= (piece.cost - replacedPiece.sellValue);
+          spendingBudget -= (piece.cost - replacedPiece.sellValue);
+          piecesBought++;
+          consecutiveFailures = 0;
+          
+          console.log(`🤖 Replaced ${replacedPiece.name} with ${piece.name} for net ${piece.cost - replacedPiece.sellValue}g`);
+        } else {
+          consecutiveFailures++;
+        }
       } else {
-        // No valid position found, stop trying
-        console.log(`🤖 No valid position for ${piece.name}, stopping purchases`);
-        break;
+        // Normal mode: no valid position found, increment failures
+        consecutiveFailures++;
+        if (consecutiveFailures >= 5) {
+          console.log(`🤖 No valid positions found after ${consecutiveFailures} attempts, stopping purchases`);
+          break;
+        }
       }
     }
     
@@ -1437,6 +1491,216 @@ export class GameService {
     gameState.opponentTank.waterQuality = this.calculateWaterQuality(gameState.opponentTank);
     
     return { remainingGold: opponentGold };
+  }
+
+  private calculateOpponentSpendingBudget(
+    currentGold: number, 
+    round: number, 
+    lossStreak: number, 
+    winStreak: number
+  ): number {
+    // Game phase definitions
+    const isEarlyGame = round <= 5;
+    const isMidGame = round > 5 && round <= 10;
+    const isLateGame = round > 10;
+    
+    // Interest breakpoints (10g, 20g, 30g, 40g, 50g)
+    const nextInterestBreakpoint = Math.ceil(currentGold / 10) * 10;
+    const goldToNextBreakpoint = nextInterestBreakpoint - currentGold;
+    
+    let spendingBudget = currentGold;
+    
+    // Early game: Aggressive spending, must build board strength first
+    if (isEarlyGame) {
+      if (round <= 3) {
+        // Rounds 1-3: Spend almost everything to build board
+        spendingBudget = Math.max(0, currentGold - 1); 
+      } else {
+        // Rounds 4-5: Start considering interest if doing well
+        if (lossStreak >= 2) {
+          spendingBudget = currentGold; // Spend everything when losing
+        } else if (currentGold >= 20 && winStreak >= 2) {
+          spendingBudget = currentGold - 10; // Eco only when winning and rich
+        } else {
+          spendingBudget = Math.max(0, currentGold - 2); // Keep minimal buffer
+        }
+      }
+    }
+    
+    // Mid game: More aggressive, but still respect interest
+    else if (isMidGame) {
+      if (lossStreak >= 3) {
+        spendingBudget = currentGold; // All-in when losing badly
+      } else if (winStreak >= 3) {
+        spendingBudget = Math.max(0, currentGold - 20); // Eco when winning
+      } else {
+        spendingBudget = Math.max(0, currentGold - 10); // Standard play
+      }
+    }
+    
+    // Late game: Spend for power, interest less important
+    else if (isLateGame) {
+      if (lossStreak >= 2) {
+        spendingBudget = currentGold; // Must spend to survive
+      } else {
+        spendingBudget = Math.max(0, currentGold - 5); // Keep small buffer
+      }
+    }
+    
+    return Math.min(spendingBudget, currentGold);
+  }
+
+  private tryReplaceWeakerPiece(
+    opponentTank: Tank, 
+    newPiece: GamePiece, 
+    availableBudget: number
+  ): { name: string; sellValue: number } | null {
+    // Calculate power rating for pieces to find weakest
+    const getPiecePower = (piece: GamePiece) => {
+      return piece.stats.attack + piece.stats.health + (piece.stats.speed * 0.5);
+    };
+    
+    const newPiecePower = getPiecePower(newPiece);
+    const sellValue = Math.floor(newPiece.cost * 0.75); // 75% sell value
+    const netCost = newPiece.cost - sellValue;
+    
+    // Don't replace if we can't afford the net cost
+    if (netCost > availableBudget) {
+      return null;
+    }
+    
+    // Find pieces that are weaker than the new piece and worth replacing
+    const replaceablePieces = opponentTank.pieces
+      .map(piece => ({
+        piece,
+        power: getPiecePower(piece),
+        sellValue: Math.floor(piece.cost * 0.75)
+      }))
+      .filter(p => p.power < newPiecePower * 0.8) // Only replace significantly weaker pieces
+      .sort((a, b) => a.power - b.power); // Weakest first
+    
+    if (replaceablePieces.length === 0) {
+      return null;
+    }
+    
+    const toReplace = replaceablePieces[0];
+    
+    // Remove the old piece from tank and grid
+    const pieceIndex = opponentTank.pieces.findIndex(p => p.id === toReplace.piece.id);
+    if (pieceIndex !== -1) {
+      opponentTank.pieces.splice(pieceIndex, 1);
+      this.removePieceFromGrid(opponentTank, toReplace.piece);
+      
+      // Try to place the new piece in the freed space or anywhere else
+      const position = this.findValidPositionForOpponent(opponentTank, newPiece);
+      if (position) {
+        const placedPiece = { 
+          ...newPiece, 
+          id: uuidv4(),
+          position
+        };
+        
+        this.placePieceOnGrid(opponentTank, placedPiece);
+        opponentTank.pieces.push(placedPiece);
+        
+        return {
+          name: toReplace.piece.name,
+          sellValue: toReplace.sellValue
+        };
+      } else {
+        // Couldn't place new piece, put old one back
+        this.placePieceOnGrid(opponentTank, toReplace.piece);
+        opponentTank.pieces.push(toReplace.piece);
+      }
+    }
+    
+    return null;
+  }
+
+  private findOptimalConsumablePosition(tank: Tank, consumable: GamePiece): Position | null {
+    let bestPosition: Position | null = null;
+    let maxFishTouched = 0;
+    
+    console.log(`🤖 Finding optimal position for consumable ${consumable.name}`);
+    
+    // Try every possible position and count adjacent fish
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 8; x++) {
+        const position = { x, y };
+        
+        // Check if this position is valid for placement
+        if (!this.isValidPosition(tank, consumable, position)) {
+          continue;
+        }
+        
+        // Count how many fish this position would touch
+        const fishTouched = this.countAdjacentFish(tank, consumable, position);
+        
+        if (fishTouched > maxFishTouched) {
+          maxFishTouched = fishTouched;
+          bestPosition = position;
+        }
+      }
+    }
+    
+    console.log(`🤖 Best consumable position touches ${maxFishTouched} fish at ${bestPosition ? `(${bestPosition.x},${bestPosition.y})` : 'none'}`);
+    return bestPosition;
+  }
+
+  private countAdjacentFish(tank: Tank, consumable: GamePiece, position: Position): number {
+    const consumablePositions = consumable.shape.map(offset => ({
+      x: position.x + offset.x,
+      y: position.y + offset.y
+    }));
+    
+    // Get all positions adjacent to the consumable
+    const adjacentPositions = new Set<string>();
+    
+    consumablePositions.forEach(consPos => {
+      // Add all 8 adjacent positions for this consumable cell
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          if (dx === 0 && dy === 0) continue; // Skip the consumable cell itself
+          
+          const adjPos = { x: consPos.x + dx, y: consPos.y + dy };
+          
+          // Only add if it's within bounds and not occupied by the consumable itself
+          if (adjPos.x >= 0 && adjPos.x < 8 && adjPos.y >= 0 && adjPos.y < 6) {
+            const isConsumableCell = consumablePositions.some(cp => cp.x === adjPos.x && cp.y === adjPos.y);
+            if (!isConsumableCell) {
+              adjacentPositions.add(`${adjPos.x},${adjPos.y}`);
+            }
+          }
+        }
+      }
+    });
+    
+    // Count how many fish are at these adjacent positions
+    let fishCount = 0;
+    const adjacentPosArray = Array.from(adjacentPositions).map(posStr => {
+      const [x, y] = posStr.split(',').map(Number);
+      return { x, y };
+    });
+    
+    for (const adjPos of adjacentPosArray) {
+      // Find if there's a fish piece at this position
+      const fishAtPosition = tank.pieces.find(piece => {
+        if (piece.type !== 'fish' || !piece.position) return false;
+        
+        // Check if any part of this fish occupies the adjacent position
+        return piece.shape.some(offset => {
+          const fishCellX = piece.position!.x + offset.x;
+          const fishCellY = piece.position!.y + offset.y;
+          return fishCellX === adjPos.x && fishCellY === adjPos.y;
+        });
+      });
+      
+      if (fishAtPosition) {
+        fishCount++;
+      }
+    }
+    
+    return fishCount;
   }
 
   private generateOpponentTankWithGold(startingGold = 10, round = 1): { tank: Tank; remainingGold: number } {
@@ -1465,7 +1729,7 @@ export class GameService {
     while (opponentGold > 0 && pieceCount < maxPieces && consecutiveFailures < maxConsecutiveFailures) {
       // In later rounds, prefer higher cost pieces (better units)
       const piece = typeof this.getOpponentPieceForRound === 'function' 
-        ? this.getOpponentPieceForRound(round, opponentGold)
+        ? this.getOpponentPieceForRound(round, opponentGold, 5, 0) // Default water quality 5, no loss streak
         : this.getRandomPiece();
       
       if (!piece || piece.cost > opponentGold) {
@@ -1534,9 +1798,6 @@ export class GameService {
     };
   }
 
-  private generateOpponentTank(): Tank {
-    return this.generateOpponentTankWithGold().tank;
-  }
 
   private findValidPositionForOpponent(tank: Tank, piece: GamePiece): Position | null {
     // Try to find a valid position for the piece without overlapping existing pieces

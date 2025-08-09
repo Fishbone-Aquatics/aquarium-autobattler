@@ -419,6 +419,8 @@ export function BattleView({ gameState }: BattleViewProps) {
                 getTypeColors={getTypeColors}
                 onPieceHover={handleTankPieceHover}
                 highlightedPieceId={highlightedPieceId}
+                gamePhase={gameState.phase}
+                battlePieces={battleState?.playerPieces}
               />
             </div>
 
@@ -435,6 +437,8 @@ export function BattleView({ gameState }: BattleViewProps) {
                 getTypeColors={getTypeColors}
                 onPieceHover={handleTankPieceHover}
                 highlightedPieceId={highlightedPieceId}
+                gamePhase={gameState.phase}
+                battlePieces={battleState?.opponentPieces}
               />
             </div>
           </div>
