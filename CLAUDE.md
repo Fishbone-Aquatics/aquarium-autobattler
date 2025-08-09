@@ -91,12 +91,49 @@ Understanding the game helps when debugging or adding features:
 - **Real-time battles** with speed-based initiative order
 - **Session persistence** - game state survives page refreshes
 
+## Recent Major Features (2025-08-09)
+
+### Water Quality System ✅
+- **Fish decrease quality (-1), plants increase (+1), equipment neutral**
+- **Combat bonuses**: 30% damage bonus for quality 8-10, 30% penalty for quality 1-3
+- **Poison damage**: Fish in poor water (1-3) take 1 poison damage per turn
+- **Visual indicators**: Water quality badges show combat bonuses in UI
+- **Random starting quality**: Games start with 6-8 instead of fixed 5
+
+### Equipment System Fixes ✅
+- **Fixed critical adjacency bugs**: Removed double-application of filter bonuses
+- **Precise adjacency logic**: Only plants directly touching filters get boosted
+- **Multi-cell handling**: Pieces get one bonus per source regardless of contact points
+- **Current state**: Equipment affects water quality only, adjacency bonuses removed for simplicity
+
+### Mobile-First UI Improvements ✅
+- **Shop cards**: Restructured for mobile (shape top-right, horizontal stats, info icon)
+- **Battle prep screen**: Battle button first, collapsible sections, no-scroll design
+- **Battle log**: Expanded from 256px to 700px max height with gradient header
+
 ## Known Issues & Priorities
 
-Critical issues (from TODO.md):
-1. **No sell functionality** - can't sell pieces for gold
-2. **Game end missing** - Round 15 doesn't reset or show victory  
-3. **Real-time health updates** - health bars update per turn, not per attack
+See TODO.md for current priorities.
+
+## Common Build Issues & Solutions
+
+### TypeScript Errors
+- **Missing properties**: Check shared-types interfaces match usage (e.g., `totalPower` → use `totalAttack + totalHealth`)
+- **Import/Export mismatches**: Ensure all exports from shared-types are properly imported
+
+### JSX Structure Errors
+- **Unclosed tags**: Watch for dangling `</>` or mismatched conditional rendering
+- **Component nesting**: Ensure proper `{ condition && (<>...</>)}` structure
+
+### Adjacency Logic Debugging
+- **Multi-cell pieces**: Use `aretwoPiecesAdjacent()` helper for proper shape-aware adjacency
+- **Bonus stacking**: Ensure each piece gets only one bonus per source
+- **Equipment effects**: Current system only affects water quality, not adjacency bonuses
+
+### Mobile UI Patterns
+- **Collapsible sections**: Use `useState` + conditional rendering for mobile-friendly progressive disclosure
+- **Info icons**: Use ℹ️ with hover (desktop) + tap (mobile) for detailed information
+- **Button hierarchy**: Primary actions first (especially on mobile), secondary details collapsible
 
 ## Testing Strategy
 
@@ -107,6 +144,14 @@ Run comprehensive tests with `npm run test:comprehensive` which validates:
 - CSS compilation with Tailwind
 - Component file presence
 - Development dependencies
+
+### Build Commands for Error Checking
+```bash
+npm run build:shared          # Always build shared types first
+npm run build:all             # Full build to catch all errors
+npx nx build frontend         # Frontend-specific TypeScript/JSX errors
+npx nx build game-engine      # Backend-specific errors
+```
 
 ## URLs During Development
 - Frontend: http://localhost:3000
