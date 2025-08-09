@@ -23,18 +23,31 @@
 - **Status**: ✅ Filter bugs fixed - now applies flat +1 bonus to adjacent plant effects
 - **Next**: Design and implement additional equipment types
 
-### 3. Opponent AI Improvements
-- **Issue**: AI hoards gold (sitting on 50g with losing streak), poor purchasing decisions, doesn't care about water quality, doesn't utilize reroll when standing on gold, doesnt group things for bonsues or use consumables properly.
-We want to build this system in a way where it will be easy to add more - and they will have functions such as defensive() and aggressive() or frugal() which an be called and determined per round or w/e so we can create dynamic and mutliple bots "opponutes" quickely 
-- **Impact**: Battles become too easy, poor game balance  
-- **Solution**: Implement smarter AI that considers gold efficiency (interest, spending, rerolling), loss/win streaks, water quality, and power spikes
-- **Files**: `game.service.ts` - `updateOpponentTank()` method
+### 3. Dynamic AI Personality System
+- **Issue**: All AI opponents use the same strategy, limiting variety and replayability
+- **Impact**: Predictable opponents, less strategic depth in different matchups
+- **Solution**: Implement personality-based AI with defensive(), aggressive(), frugal() strategies that can be assigned per round
+- **Goal**: Create multiple bot "opponents" with distinct playstyles (risk-averse vs aggressive spending, different piece preferences)
+- **Files**: `game.service.ts` - extend current AI logic with personality parameters
+- **Foundation**: Current smart AI provides base logic, personalities would modify decision weights
 
 ---
 
 ## 🔵 Medium Priority Fixes
 
-### 4. Player Grid Logging System
+### 4. Interest & Economy Balance Review
+- **Issue**: Need to verify opponent interest mechanics and potentially rebalance base economy
+- **Questions**: Does opponent gain interest? Is base 5g enough or should there be guaranteed win/loss bonuses (+3 win, +1 loss)?
+- **Impact**: Economy balance affects game flow and comeback potential
+- **Files**: `game.service.ts` - economy calculation methods
+
+### 5. Shop Progression System
+- **Issue**: Shop items should scale with round progression (rarer/more expensive in later rounds)
+- **Impact**: Late game lacks proper item scaling, making progression feel flat
+- **Solution**: Implement round-based shop tiers with better pieces appearing in later rounds
+- **Files**: `game.service.ts` - shop generation logic
+
+### 6. Player Grid Logging System
 - **Issue**: Need to collect player tank builds for future opponent matching
 - **Impact**: Currently using AI opponents only, limiting strategic variety
 - **Solution**: Log player grids/builds between rounds to temp table, queryable via API for faux opponents in "ranked" battles
@@ -65,23 +78,47 @@ We want to build this system in a way where it will be easy to add more - and th
 - **Solution**: Display numeric values in bonus descriptions
 - **Files**: `GameView.tsx`, `TankGrid.tsx` - tooltip sections
 
+### 9. Win/Loss Streak Tooltip Enhancement
+- **Issue**: Hover tooltips for win/loss streaks should show full progression scale for planning
+- **Impact**: Players can't see what bonuses they'll get at higher streaks (e.g., "L3=6g, L4=8g, L5=10g")
+- **Solution**: Display complete bonus scale in tooltips, not just current streak bonus
+- **Files**: `Header.tsx` - streak indicator tooltips
+
+### 10. Double Speed Bonus UI Clarity
+- **Issue**: Double speed bonus exists but not displayed as separate ability in UI, looks weird
+- **Impact**: Confusing ability display, unclear what bonuses are active
+- **Solution**: Separate double speed into distinct ability or clarify in UI
+- **Files**: `pieces.ts`, tooltip components
+
+### 11. Consumable Inventory Management
+- **Issue**: Brine Shrimp can be stored in inventory at game start instead of being auto-consumed
+- **Impact**: Inconsistent consumable behavior, should be forced to place or consume
+- **Solution**: Force consumable placement/consumption, don't allow inventory storage
+- **Files**: Game state management, consumable logic
+
+### 12. Final Battle Round Display Bug
+- **Issue**: Round counter shows "16/15" during final battle instead of "15/15"  
+- **Impact**: Minor UI bug, confusing display
+- **Solution**: Fix round counter logic for final battle display
+- **Files**: Round display components
+
 ---
 
 ## 🟢 Low Priority Polish
 
-### 9. Grid Screen Hover Tooltips
+### 13. Grid Screen Hover Tooltips
 - **Issue**: Tank grid screen missing hover tooltips like those on shop screen
 - **Impact**: Inconsistent UX, harder to inspect placed pieces
 - **Solution**: Add hover tooltips to placed pieces in tank summary/grid view
 - **Files**: `TankGrid.tsx`, `TankSummary.tsx` - tooltip integration
 
-### 10. Shop Question Mark Hover
+### 14. Shop Question Mark Hover
 - **Issue**: Shop "?" icon has no hover tooltip or interaction
 - **Impact**: Users can't get help about shop mechanics
 - **Solution**: Add hover tooltip explaining shop mechanics, rerolls, locking
 - **Files**: `Shop.tsx` - add tooltip to help icon
 
-### 11. Interest Display in Gold Tracker
+### 15. Interest Display in Gold Tracker
 - **Issue**: Interest info clutters main UI, should be in gold tracker modal
 - **Impact**: UI feels cluttered, interest info not with other gold details
 - **Solution**: Move interest display to gold tracker modal, remove from main UI
@@ -100,6 +137,21 @@ We want to build this system in a way where it will be easy to add more - and th
 - **Files**: `Header.tsx` - add streak indicator tooltips
 
 
+
+---
+
+## 🎮 New Content & Items
+
+### Missing Consumables
+- **Blood Worms** - Re-add as consumable item with appropriate fish bonuses
+- **Status**: Need to implement and balance effects
+
+### Anti-Meta Items (Disruptive Equipment/Consumables)
+- **Schooling Disruptor** - Item to disrupt schooled fish speed bonuses
+- **Board Scrambler** - Item to shuffle opponent's board layout at battle start  
+- **Water Quality Sabotage** - Item to disrupt opponent's water quality, disable filters, or reduce power
+- **Purpose**: Add counterplay options and strategic depth against dominant strategies
+- **Files**: `pieces.ts` - new item definitions with opponent-affecting abilities
 
 ---
 
@@ -159,6 +211,9 @@ We want to build this system in a way where it will be easy to add more - and th
 
 ### Recent Completions ✅
 - **Loss/Win Streak Economy Overhaul** - Removed confusing double bonuses (win+streak), simplified to base 5g + streak-only bonuses, proper transaction logging, double-loss scenario handling
+- **Opponent AI Intelligence Overhaul** - Smart spending budgets, crisis mode, water quality prioritization (plants/filters vs fish), consumable optimization, piece replacement logic
+- **Battle Display Enhancements** - Current HP/attack values during battles, dead piece detection (0 HP → skull + KO), real-time stat updates
+- **Code Cleanup** - Removed unused AI generation methods, streamlined water quality logic
 - Game End System - Round 15 final battle UI and automatic campaign reset
 - Sell Functionality - 75% value sell buttons on placed pieces
 - Real-time Battle Health Updates - Health bars update after each individual attack

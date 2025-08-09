@@ -22,7 +22,8 @@
       "Bash(timeout 15s npm run start:frontend)",
       "Bash(./start.ps1)",
       "WebFetch(domain:localhost)",
-      "WebFetch(domain:cdn.discordapp.com)"
+      "WebFetch(domain:cdn.discordapp.com)",
+      "Bash(npx nx show project:*)"
     ],
     "deny": []
   }
