@@ -129,8 +129,9 @@ SOCKET_EVENTS.ERROR                 // Error messages
 ### Tank & Combat
 - **Grid Validation** - 8×6 grid with shape-based collision detection
 - **Piece Placement** - Multi-cell piece support, position validation
-- **Stat Calculation** - Base stats + adjacency bonuses + synergies
-- **Battle Simulation** - Power comparison with win/loss streaks
+- **Water Quality System** - Fish decrease quality (-1), plants increase (+1), affects damage bonuses
+- **Stat Calculation** - Base stats + adjacency bonuses + water quality multipliers
+- **Battle Simulation** - Combat with poison damage, speed-based initiative, detailed logging
 
 ### Session Persistence
 - **Player IDs** - Persistent identifiers from localStorage

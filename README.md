@@ -7,7 +7,7 @@ A modern, scalable auto-battler game built with Next.js, NestJS, and WebSockets.
 - 🎮 **Real-time Gameplay** - WebSocket-powered multiplayer experience
 - 🐠 **Strategic Placement** - 8×6 grid-based tank management
 - 💰 **Gold Economy** - Shop, buy, sell, and manage resources
-- 🌊 **Water Mechanics** - Quality and temperature affect performance  
+- 🌊 **Water Quality System** - Dynamic quality affects combat bonuses, poison damage, and strategy  
 - 🔄 **Session Persistence** - Your progress saves across page refreshes
 - 🛠️ **Modular Architecture** - Clean, scalable codebase structure
 
@@ -82,9 +82,10 @@ npm run lint                  # Run linting
 ### Game Mechanics
 
 - 🏪 **Shop System** - 6 rotating pieces, 2g reroll cost, lock favorite pieces
-- 💰 **Economy** - Earn interest (1g per 10g held, max 5g), sell for 50% value
+- 💰 **Economy** - Earn interest (1g per 10g held, max 5g), sell for 50% value  
 - 🐠 **Piece Types** - Fish (attackers), Plants (buffs), Equipment (utility), Consumables (one-time boosts)
-- 🎯 **Strategy** - Adjacency bonuses, schooling synergies, water quality effects
+- 🌊 **Water Quality** - Fish decrease quality (-1), plants increase (+1), affects combat damage (±30%)
+- 🎯 **Strategy** - Adjacency bonuses, schooling synergies, water quality management
 - 📊 **Persistence** - Server-side session storage survives page refreshes
 
 ## 📁 Project Structure
@@ -154,10 +155,10 @@ npx nx lint game-engine    # Lint backend code
 - Shape-based piece placement validation
 
 ### Battle System
-- Turn-based combat simulation
-- Stat comparison system
-- Reward calculation based on performance
-- Loss streak bonus system
+- Turn-based combat with water quality bonuses/penalties
+- Enhanced battle log with real-time event tracking
+- Poison damage for fish in poor water quality (1-3)
+- Reward calculation and loss streak bonuses
 
 ### Economy
 - Gold-based purchase system

@@ -32,10 +32,18 @@
 - **Shop Lock System**: Lock desired pieces between rounds
 - **Persistent Opponents**: Opponents grow organically between rounds
 
+### ✅ Water Quality System
+- **Dynamic Water Quality**: Fish decrease quality (-1), plants increase (+1), equipment provides buffs
+- **Quality-Based Combat**: 30% damage bonus for excellent water (8-10), 30% penalty for poor water (1-3)
+- **Poison Mechanics**: Fish in dirty water (1-3 quality) take poison damage during battles
+- **Visual Indicators**: Water quality bonus/penalty badges in tank summary and stat comparisons
+- **Random Starting Quality**: New games start with random water quality (6-8) for strategic variety
+
 ### ✅ Quality of Life
+- **Enhanced Battle Log**: Modernized UI with gradient header, proper sizing (700px max height), event counter
 - **Hover Tooltips**: Detailed piece stats, abilities, and adjacency bonuses
 - **Visual Indicators**: Dead piece markers, stat highlighting, drag previews  
-- **Session Management**: Save/restore game state, reset games, new player IDs
+- **Session Management**: Save/restore game state, reset games with shop generation, new player IDs
 - **Build System**: NX monorepo with TypeScript, React, NestJS
 
 ---
@@ -43,21 +51,16 @@
 ## 🐛 Known Issues & Missing Features
 
 ### 🔴 High Priority
-- **No Sell Functionality**: Can't sell pieces back for gold
-- **Game End Missing**: Round 15 doesn't indicate final battle or reset game
-- **Real-time Health Updates**: Health bars update per turn, not per attack (feels choppy)
+
+*All high priority issues have been resolved! 🎉*
 
 ### 🟡 Medium Priority  
-- **Gold Transaction History**: No way to track gold income/expenses over time
-- **Equipment Underutilized**: Only Basic Filter exists, needs more variety
+- **Equipment System Expansion**: Only Basic Filter exists, needs more variety
 - **Missing Pieces**: Some items seem to be missing from original piece library
-- **Equipment Respawn**: Equipment doesn't respawn after battles like other pieces
 - **Opponent AI**: Doesn't spend gold optimally, sometimes hoards large amounts
 
 ### 🔵 Low Priority
-- **Adjacency Tooltips**: Don't show specific stat values provided by bonuses  
-- **Battle Log UI**: Log section is very small and hard to read
-- **New ID Shop Bug**: Getting new player ID doesn't regenerate shop (requires reroll)
+- **Adjacency Tooltips**: Don't show specific stat values provided by bonuses
 
 ---
 
@@ -108,10 +111,14 @@
 
 ### Damage Calculation
 ```
-Final Damage = Base Attack + Adjacency Bonuses + Water Quality Bonus
+Final Damage = (Base Attack + Adjacency Bonuses) × Water Quality Multiplier
 - Base Attack: Piece's natural attack stat + permanent consumable bonuses
-- Adjacency Bonuses: Bonuses from adjacent plants/consumables
-- Water Quality Bonus: 10% per water quality point above 5
+- Adjacency Bonuses: Bonuses from adjacent plants/consumables  
+- Water Quality Multiplier: 
+  • 1.3× (30% bonus) for excellent water (quality 8-10)
+  • 1.0× (no change) for normal water (quality 4-7)
+  • 0.7× (30% penalty) for poor water (quality 1-3)
+- Poison Damage: Fish in poor water (1-3) take 1 additional poison damage per turn
 ```
 
 ### Adjacency System
@@ -141,5 +148,5 @@ Final Damage = Base Attack + Adjacency Bonuses + Water Quality Bonus
 
 ---
 
-*Last Updated: 2025-08-08*
-*Game Version: Alpha v0.1*
+*Last Updated: 2025-08-09*
+*Game Version: Alpha v0.2*

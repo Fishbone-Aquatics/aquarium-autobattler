@@ -439,9 +439,17 @@ export function BattleView({ gameState }: BattleViewProps) {
 
           {/* Battle Log - Show during battle */}
           {gameState.phase === 'battle' && battleEvents.length > 0 && (
-            <div className="bg-white bg-opacity-95 rounded-lg p-6 mb-8 shadow-lg">
-              <div id="battle-log-container" className="max-h-64 overflow-y-auto">
-                <BattleLog events={battleEvents} maxHeight="240px" />
+            <div className="bg-white bg-opacity-95 rounded-lg shadow-xl border border-gray-200 mb-8">
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 rounded-t-lg">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  ⚔️ Battle Log
+                  <span className="text-sm font-normal bg-white/20 px-2 py-1 rounded">
+                    {battleEvents.length} events
+                  </span>
+                </h3>
+              </div>
+              <div id="battle-log-container" className="max-h-[700px] min-h-[500px] overflow-y-auto p-6 bg-gray-50">
+                <BattleLog events={battleEvents} maxHeight="384px" />
               </div>
             </div>
           )}

@@ -1161,6 +1161,32 @@ export class GameService {
     }
   }
 
+  private aretwoPiecesAdjacent(piece1: GamePiece, piece2: GamePiece): boolean {
+    if (!piece1.position || !piece2.position || piece1.id === piece2.id) return false;
+    
+    // Get all cells occupied by piece1
+    const piece1Cells = piece1.shape.map(offset => ({
+      x: piece1.position!.x + offset.x,
+      y: piece1.position!.y + offset.y
+    }));
+    
+    // Get all cells occupied by piece2
+    const piece2Cells = piece2.shape.map(offset => ({
+      x: piece2.position!.x + offset.x,
+      y: piece2.position!.y + offset.y
+    }));
+    
+    // Check if any cell of piece1 is adjacent to any cell of piece2
+    return piece1Cells.some(cell1 => {
+      return piece2Cells.some(cell2 => {
+        const dx = Math.abs(cell1.x - cell2.x);
+        const dy = Math.abs(cell1.y - cell2.y);
+        // Adjacent if within 1 cell in both directions (8-directional adjacency)
+        return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+      });
+    });
+  }
+
   private getAdjacentPositionsForPiece(piece: GamePiece): Position[] {
     if (!piece.position) return [];
     
@@ -1218,63 +1244,19 @@ export class GameService {
     let healthBonus = 0;
     let speedBonus = 0;
 
-    // Get all adjacent positions for this multi-cell piece
-    const adjacentPositions = this.getAdjacentPositionsForPiece(piece);
+    // Find adjacent pieces using the proper adjacency check
+    const adjacentPieces = allPieces.filter(p => this.aretwoPiecesAdjacent(piece, p));
 
-    // Find adjacent pieces - check if any of their cells are adjacent to any of our cells
-    const adjacentPieces = allPieces.filter(p => {
-      if (!p.position || p.id === piece.id) return false;
-      
-      // Check if any cell of piece p is adjacent to our piece
-      return p.shape.some(offset => {
-        const cellPos = { x: p.position!.x + offset.x, y: p.position!.y + offset.y };
-        return adjacentPositions.some(adjPos => adjPos.x === cellPos.x && adjPos.y === cellPos.y);
-      });
-    });
-
-    // Apply adjacency bonuses from plants and consumables
+    // Apply adjacency bonuses from plants and consumables to fish
     adjacentPieces.forEach(adjacentPiece => {
       if ((adjacentPiece.type === 'plant' || adjacentPiece.type === 'consumable') && piece.type === 'fish') {
-        let bonusAttack = adjacentPiece.attackBonus || 0;
-        let bonusHealth = adjacentPiece.healthBonus || 0;
-        let bonusSpeed = adjacentPiece.speedBonus || 0;
-        
-        // Equipment effects: filter boosts plant effects by 20%
-        if (adjacentPiece.type === 'plant') {
-          const filterAdjacent = adjacentPieces.some(p => p.type === 'equipment' && p.tags.includes('filter'));
-          if (filterAdjacent) {
-            const originalBonus = Math.max(bonusAttack, bonusHealth, bonusSpeed);
-            const boost = Math.ceil(originalBonus * 0.2);
-            bonusAttack = bonusAttack > 0 ? bonusAttack + boost : bonusAttack;
-            bonusHealth = bonusHealth > 0 ? bonusHealth + boost : bonusHealth;
-            bonusSpeed = bonusSpeed > 0 ? bonusSpeed + boost : bonusSpeed;
-          }
-        }
+        const bonusAttack = adjacentPiece.attackBonus || 0;
+        const bonusHealth = adjacentPiece.healthBonus || 0;
+        const bonusSpeed = adjacentPiece.speedBonus || 0;
         
         attackBonus += bonusAttack;
         healthBonus += bonusHealth;
         speedBonus += bonusSpeed;
-      }
-    });
-
-    // Apply equipment effects
-    adjacentPieces.forEach(adjacentPiece => {
-      if (adjacentPiece.type === 'equipment') {
-        // Filter boosts plant effects by 20%
-        if (adjacentPiece.tags.includes('filter')) {
-          // Count plants adjacent to this piece and boost their effects
-          const adjacentPlants = adjacentPieces.filter(p => p.type === 'plant');
-          adjacentPlants.forEach(plant => {
-            const baseAttackBonus = plant.attackBonus || 0;
-            const baseHealthBonus = plant.healthBonus || 0;
-            const baseSpeedBonus = plant.speedBonus || 0;
-            
-            // Add 20% boost to plant effects
-            attackBonus += Math.floor(baseAttackBonus * 0.2);
-            healthBonus += Math.floor(baseHealthBonus * 0.2);
-            speedBonus += Math.floor(baseSpeedBonus * 0.2);
-          });
-        }
       }
     });
 
