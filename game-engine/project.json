@@ -33,6 +33,14 @@
           "buildTarget": "game-engine:build:production"
         }
       }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectName}"],
+      "options": {
+        "jestConfig": "game-engine/jest.config.ts",
+        "passWithNoTests": true
+      }
     }
   },
   "tags": []

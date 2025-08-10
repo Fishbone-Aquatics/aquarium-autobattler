@@ -28,7 +28,9 @@
       "Bash(grep:*)",
       "Bash(sed:*)",
       "Bash(python:*)",
-      "Bash(timeout 15s npm run dev)"
+      "Bash(timeout 15s npm run dev)",
+      "Bash(rg:*)",
+      "Bash(npx nx test:*)"
     ],
     "deny": []
   }
