@@ -23,7 +23,12 @@
       "Bash(./start.ps1)",
       "WebFetch(domain:localhost)",
       "WebFetch(domain:cdn.discordapp.com)",
-      "Bash(npx nx show project:*)"
+      "Bash(npx nx show project:*)",
+      "Bash(mkdir:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(python:*)",
+      "Bash(timeout 15s npm run dev)"
     ],
     "deny": []
   }

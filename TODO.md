@@ -24,116 +24,150 @@
 - **Files**: `game.service.ts` - extend current AI logic with personality parameters
 - **Foundation**: Current smart AI provides base logic, personalities would modify decision weights
 
+### 4. Random Events System
+- **Issue**: Gameplay lacks unpredictable elements to add excitement and variety
+- **Impact**: Matches can become too predictable and strategic variety is limited
+- **Solution**: Implement a system for random events like lightning shutting off filters during bad weather, or time-based effects (day/night cycle)
+- **Files**: `game.service.ts`, `battle.service.ts` - add event generation and effects
+- **Connection**: Could be integrated with the day/night cycle system
+
 ---
 
 ## 🔵 Medium Priority Fixes
 
-### 4. Interest & Economy Balance Review
+### 5. Interest & Economy Balance Review
 - **Issue**: Need to verify opponent interest mechanics and potentially rebalance base economy
 - **Questions**: Does opponent gain interest? Is base 5g enough or should there be guaranteed win/loss bonuses (+3 win, +1 loss)?
 - **Impact**: Economy balance affects game flow and comeback potential
 - **Files**: `game.service.ts` - economy calculation methods
 
-### 5. Shop Progression System
+### 6. Shop Progression System
 - **Issue**: Shop items should scale with round progression (rarer/more expensive in later rounds)
 - **Impact**: Late game lacks proper item scaling, making progression feel flat
 - **Solution**: Implement round-based shop tiers with better pieces appearing in later rounds
 - **Files**: `game.service.ts` - shop generation logic
+- **Details**: Percentage-based rarity tiers that evolve as rounds progress (e.g., first 5 rounds: 70% common, 20% uncommon, 10% rare; next rounds: 30% common, 20% uncommon, 30% rare, 20% very rare)
+- **Considerations**: Economy scaling for higher-tier items ($10+ fish) and reroll penalties to prevent dominant strategies
 
-### 6. Player Grid Logging System
+### 7. Player Grid Logging System
 - **Issue**: Need to collect player tank builds for future opponent matching
 - **Impact**: Currently using AI opponents only, limiting strategic variety
 - **Solution**: Log player grids/builds between rounds to temp table, queryable via API for faux opponents in "ranked" battles
 - **Files**: `game.service.ts`, new debug endpoint, database/temp storage
 - **Goal**: Enable real player builds as opponents instead of just AI strategies
 
-### 5. Purchase Validation & Error Handling
+### 8. Purchase Validation & Error Handling
 - **Issue**: Buying items with insufficient gold causes WebSocket errors instead of client-side prevention
 - **Impact**: Poor user experience, confusing error messages
 - **Solution**: Add client-side gold validation before purchase, show user-friendly notifications
 - **Files**: `Shop.tsx`, `GameContext.tsx` - purchase logic and UI feedback
 
-### 6. Battle Start Validation
+### 9. Battle Start Validation
 - **Issue**: Players can start battles with 0 pieces on board
 - **Impact**: Instant losses, confusing gameplay
 - **Solution**: Add validation to prevent battle start with empty tank, show warning message
 - **Files**: `BattleView.tsx`, `game.service.ts` - battle initiation logic
 
-### 7. Missing Items Investigation
+### 10. Missing Items Investigation
 - **Issue**: Some items seem missing from original piece library
 - **Impact**: Reduced content variety
 - **Solution**: Audit piece library, compare with design docs, add missing pieces
 - **Files**: `pieces.ts`
 
-### 8. Adjacency Bonus Tooltips
+### 11. Adjacency Bonus Tooltips
 - **Issue**: Tooltips don't show specific stat values from adjacency bonuses
 - **Impact**: Players can't see exact bonus amounts (+1 ATK, +2 HP, etc.)
 - **Solution**: Display numeric values in bonus descriptions
 - **Files**: `GameView.tsx`, `TankGrid.tsx` - tooltip sections
 
-### 9. Win/Loss Streak Tooltip Enhancement
+### 12. Win/Loss Streak Tooltip Enhancement
 - **Issue**: Hover tooltips for win/loss streaks should show full progression scale for planning
 - **Impact**: Players can't see what bonuses they'll get at higher streaks (e.g., "L3=6g, L4=8g, L5=10g")
 - **Solution**: Display complete bonus scale in tooltips, not just current streak bonus
 - **Files**: `Header.tsx` - streak indicator tooltips
 
-### 10. Double Speed Bonus UI Clarity
+### 13. Double Speed Bonus UI Clarity
 - **Issue**: Double speed bonus exists but not displayed as separate ability in UI, looks weird
 - **Impact**: Confusing ability display, unclear what bonuses are active
 - **Solution**: Separate double speed into distinct ability or clarify in UI
 - **Files**: `pieces.ts`, tooltip components
 
-### 11. Consumable Inventory Management
+### 14. Consumable Inventory Management
 - **Issue**: Brine Shrimp can be stored in inventory at game start instead of being auto-consumed
 - **Impact**: Inconsistent consumable behavior, should be forced to place or consume
 - **Solution**: Force consumable placement/consumption, don't allow inventory storage
 - **Files**: Game state management, consumable logic
 
-### 12. Final Battle Round Display Bug
+### 15. Final Battle Round Display Bug
 - **Issue**: Round counter shows "16/15" during final battle instead of "15/15"  
 - **Impact**: Minor UI bug, confusing display
 - **Solution**: Fix round counter logic for final battle display
 - **Files**: Round display components
 
+### 16. Water Quality Documentation
+- **Issue**: Water quality effects are not clearly documented or explained to players
+- **Impact**: Players don't understand water quality mechanics (current 1-10 scale with bonuses/penalties)
+- **Solution**: Add [I] hover tooltip to explain water quality in detail, including current effects (1-3: -30% damage, poison; 4-7: neutral; 8-10: +30% damage)
+- **Files**: UI components related to water quality display
+
 ---
 
 ## 🟢 Low Priority Polish
 
-### 13. Grid Screen Hover Tooltips
+### 17. Grid Screen Hover Tooltips
 - **Issue**: Tank grid screen missing hover tooltips like those on shop screen
 - **Impact**: Inconsistent UX, harder to inspect placed pieces
 - **Solution**: Add hover tooltips to placed pieces in tank summary/grid view
 - **Files**: `TankGrid.tsx`, `TankSummary.tsx` - tooltip integration
 
-### 14. Shop Question Mark Hover
+### 18. Shop Question Mark Hover
 - **Issue**: Shop "?" icon has no hover tooltip or interaction
 - **Impact**: Users can't get help about shop mechanics
 - **Solution**: Add hover tooltip explaining shop mechanics, rerolls, locking
 - **Files**: `Shop.tsx` - add tooltip to help icon
 
-### 15. Interest Display in Gold Tracker
+### 19. Interest Display in Gold Tracker
 - **Issue**: Interest info clutters main UI, should be in gold tracker modal
 - **Impact**: UI feels cluttered, interest info not with other gold details
 - **Solution**: Move interest display to gold tracker modal, remove from main UI
 - **Files**: `Header.tsx`, `GoldTrackerModal.tsx` - relocate interest display
 
-### 12. Gold Hover Information Restoration  
+### 20. Gold Hover Information Restoration  
 - **Issue**: Hovering over gold used to show interest/bonus breakdown, feature missing
 - **Impact**: Players can't easily see where their gold is coming from
 - **Solution**: Restore gold hover tooltip showing: "Base + Interest + Loss Streak = Total"
 - **Files**: `Header.tsx` - add hover breakdown tooltip
 
-### 13. Loss/Win Streak Indicator Tooltips
+### 21. Loss/Win Streak Indicator Tooltips
 - **Issue**: L2/L3/L4 indicators next to gold have no hover explanation
 - **Impact**: Players don't understand what streak bonuses mean
 - **Solution**: Add hover tooltips explaining "Loss Streak: 3 rounds (+1g bonus)" 
 - **Files**: `Header.tsx` - add streak indicator tooltips
 
-
-
 ---
 
 ## 🎮 New Content & Items
+
+### New Fish Types
+- **Fisherman**: Catches random fish (either adjacent or in pond) and gets random buff to stats based on fish rarity
+- **Eel**: Will stun opponent for a short time with each hit (0.001% drop rate)
+- **Whale**: Gets extra buff when consuming items
+- **Sea Anemone**: When completely surrounded by clownfish, stuns opponent for 1 second every 5 seconds
+- **Catfish**: Legendary fish not affected by bad water quality
+- **Barracuda**: High speed, high attack fighter fish with no health benefits
+- **Clownfish**: Gets extra defense when around a sea anemone
+- **Fighting Fish**: Special ability where two or more in the same row fight at end of turn, winner gets buffed
+- **Poseidon**: Ultra-rare fish that buffs all other fish by +5 to all stats
+- **Shark**: Attacks cause bleeding effect (opponent loses health over time)
+- **Puffer Fish**: Increases defense when below half health, inflicts poison when hit
+- **Sea Turtle**: Low attack, low speed, high defense tank
+- **Files**: `pieces.ts` - new fish definitions with special abilities
+
+### New Plants
+- **Coral**: More surrounding coral gives more health and applies thorns ability (damage reflected when attacked)
+- **Lily Pad**: Gives more health and boosts water quality
+- **Water Lily**: Gives +2 attack if next to a lily pad, +5 attack otherwise
+- **Files**: `pieces.ts` - new plant definitions with special abilities
 
 ### Missing Consumables
 - **Blood Worms** - Re-add as consumable item with appropriate fish bonuses
@@ -186,17 +220,17 @@
 
 ### Advanced Features
 - **Tournament Mode**: Bracket-style multi-player competitions
-- **Piece Upgrade System**: Evolve pieces with repeated purchases  
-- **Special Abilities**: Active abilities triggered manually
+- **Random Events**: Events triggered randomly
 - **Environmental Effects**: Different tank biomes with unique bonuses
 - **Deck Building**: Pre-constructed teams vs random shop
+- **Day/Night Cycle**: Time-based effects and events that change gameplay
 
 ### Technical Improvements  
 - **Database Persistence**: Replace in-memory state with database
 - **Replay System**: Save and replay interesting battles
 - **Statistics Tracking**: Win rates, favorite pieces, meta analysis
-- **Spectator Mode**: Watch other players' battles
-- **Mobile App**: Native iOS/Android versions
+- **Spectator Mode**: Watch other players' battles (a list of other peoples or when clickign on a shared url/saved instance - need persistent storage)
+- **Mobile App**: Native iOS/Android versions (eh - steam version is my goal (free), this would come after)
 
 ---
 
@@ -246,11 +280,13 @@
 **For immediate work**, tackle items in this order:
 1. **Equipment System Expansion** (add variety and strategic depth)
 2. **Opponent AI Improvements** (game balance and challenge)
-3. **Player Grid Logging** (enable real opponent builds)
-4. **Purchase Validation** (UX improvements)
+3. **Random Events System** (add unpredictability and excitement)
+4. **New Fish Types & Abilities** (increase variety and strategic options)
+5. **Player Grid Logging** (enable real opponent builds)
+6. **Purchase Validation** (UX improvements)
 
 **For next session**, consider:
-- Pick one critical issue and implement fully
+- Pick one issue and implement fully
 - Test thoroughly with build system
 - Update this TODO with progress notes
 - Add any new bugs discovered to the list

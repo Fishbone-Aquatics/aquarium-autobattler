@@ -3,6 +3,8 @@ import { GameState, GamePiece, Position, Tank, DraftState, BattleState, BattleEv
 import { PIECE_LIBRARY } from '../app/data/pieces';
 import { v4 as uuidv4 } from 'uuid';
 import { PlayerService } from '../player/player.service';
+import { AIService } from '../ai/ai.service';
+import { BattleService } from '../battle/battle.service';
 
 // Game constants
 const MAX_ROUNDS = 15;
@@ -15,7 +17,11 @@ interface BattlePieceWithTeam extends BattlePiece {
 
 @Injectable()
 export class GameService {
-  constructor(private playerService: PlayerService) {}
+  constructor(
+    private playerService: PlayerService,
+    private aiService: AIService,
+    private battleService: BattleService
+  ) {}
 
   async createSession(socketId: string, playerId: string): Promise<GameState> {
     // Map socket to player
@@ -482,7 +488,7 @@ export class GameService {
     
     // Legacy method - only used for generating battle events for non-live battles  
     // This method does NOT apply any rewards or update game state
-    const battleResult = this.simulateBattle(gameState.playerTank, gameState.opponentTank);
+    const battleResult = this.battleService.simulateBattle(gameState.playerTank, gameState.opponentTank);
     
     return {
       winner: battleResult.winner,
@@ -686,7 +692,14 @@ export class GameService {
 
     // Update opponent tank for battle comparison (persistent like player)
     // Only add new pieces to existing tank, don't regenerate from scratch
-    const { remainingGold } = this.updateOpponentTank(gameState);
+    const { remainingGold } = this.aiService.updateOpponentTank(
+      gameState,
+      (tank) => this.calculateWaterQuality(tank),
+      (tank, piece) => this.findValidPositionForOpponent(tank, piece),
+      (tank, piece) => this.placePieceOnGrid(tank, piece),
+      (tank, piece) => this.removePieceFromGrid(tank, piece),
+      (tank, piece, targetType) => this.findOptimalConsumablePosition(tank, piece)
+    );
     gameState.opponentGold = remainingGold; // Track remaining gold
     gameState.phase = 'placement';
     
@@ -706,7 +719,7 @@ export class GameService {
     this.processConsumables(gameState.opponentTank);
 
     // Initialize battle state but keep on placement phase
-    const battleState = this.initializeBattleState(gameState);
+    const battleState = this.battleService.initializeBattleState(gameState, (piece, pieces) => this.calculatePieceStats(piece, pieces));
     gameState.battleState = battleState;
     gameState.phase = 'battle'; // Still need to track battle state internally
     
@@ -724,285 +737,12 @@ export class GameService {
       throw new BadRequestException('No active battle');
     }
 
-    const turnEvents = [];
-
-    // Add round start event
-    const roundEvent: BattleEvent = {
-      id: uuidv4(),
-      type: 'round_start',
-      source: 'system',
-      value: 0,
-      round: battleState.currentRound,
-      turn: battleState.currentTurn,
-      timestamp: Date.now(),
-      description: `--- Turn ${battleState.currentTurn} ---`,
-    };
-    
-    battleState.events.push(roundEvent);
-    turnEvents.push(roundEvent);
-
-    // Apply poison damage for dirty water at start of turn (quality 1-3)
-    if (gameState.playerTank.waterQuality <= 3) {
-      const poisonedFish = battleState.playerPieces.filter(p => !p.isDead && p.type === 'fish');
-      for (const fish of poisonedFish) {
-        const poisonDamage = 1; // Fixed poison damage
-        fish.currentHealth = Math.max(0, fish.currentHealth - poisonDamage);
-        const fishDied = fish.currentHealth === 0;
-        if (fishDied) {
-          fish.isDead = true;
-        }
-
-        const poisonEvent: BattleEvent = {
-          id: uuidv4(),
-          type: 'damage',
-          source: 'poison',
-          targetName: fish.name,
-          value: poisonDamage,
-          round: battleState.currentRound,
-          turn: battleState.currentTurn,
-          timestamp: Date.now(),
-          description: `☠️ ${fish.name} takes ${poisonDamage} poison damage from dirty water (Quality ${gameState.playerTank.waterQuality})${fishDied ? ' and dies!' : ` → ${fish.currentHealth}/${fish.stats.maxHealth} HP left`}`,
-        };
-
-        battleState.events.push(poisonEvent);
-        turnEvents.push(poisonEvent);
-      }
-    }
-
-    if (gameState.opponentTank.waterQuality <= 3) {
-      const poisonedFish = battleState.opponentPieces.filter(p => !p.isDead && p.type === 'fish');
-      for (const fish of poisonedFish) {
-        const poisonDamage = 1; // Fixed poison damage
-        fish.currentHealth = Math.max(0, fish.currentHealth - poisonDamage);
-        const fishDied = fish.currentHealth === 0;
-        if (fishDied) {
-          fish.isDead = true;
-        }
-
-        const poisonEvent: BattleEvent = {
-          id: uuidv4(),
-          type: 'damage',
-          source: 'poison',
-          targetName: fish.name,
-          value: poisonDamage,
-          round: battleState.currentRound,
-          turn: battleState.currentTurn,
-          timestamp: Date.now(),
-          description: `☠️ ${fish.name} takes ${poisonDamage} poison damage from dirty water (Quality ${gameState.opponentTank.waterQuality})${fishDied ? ' and dies!' : ` → ${fish.currentHealth}/${fish.stats.maxHealth} HP left`}`,
-        };
-
-        battleState.events.push(poisonEvent);
-        turnEvents.push(poisonEvent);
-      }
-    }
-
-    // Get all alive pieces from both sides (only fish can attack - plants and equipment are passive)
-    const alivePieces: BattlePieceWithTeam[] = [
-      ...battleState.playerPieces.filter(p => !p.isDead && p.type === 'fish').map(p => ({ ...p, team: 'player' as const })),
-      ...battleState.opponentPieces.filter(p => !p.isDead && p.type === 'fish').map(p => ({ ...p, team: 'opponent' as const }))
-    ];
-
-    // Check if no attacking pieces left on either side - this is a DOUBLE LOSS
-    if (alivePieces.length === 0) {
-      // Double loss scenario - neither player can attack
-      const doubleLossEvent: BattleEvent = {
-        id: uuidv4(),
-        type: 'round_start',
-        source: 'system',
-        value: 0,
-        round: battleState.currentRound,
-        turn: battleState.currentTurn,
-        timestamp: Date.now(),
-        description: `⚠️ No attacking units remain! Both players lose!`,
-        healthStates: {
-          playerHealth: 0,
-          opponentHealth: 0,
-        },
-      };
-      
-      battleState.events.push(doubleLossEvent);
-      turnEvents.push(doubleLossEvent);
-      
-      // Set both HP to 0 to indicate double loss
-      battleState.playerHealth = 0;
-      battleState.opponentHealth = 0;
-      
-      // Double loss is technically a draw (both lose)
-      battleState.winner = 'draw';
-      battleState.active = false;
-      
-      this.updateGameState(socketId, gameState);
-      return { gameState, turnEvents };
-    }
-
-    // Sort by speed (highest first), then by random for ties
-    alivePieces.sort((a, b) => {
-      if (b.stats.speed !== a.stats.speed) {
-        return b.stats.speed - a.stats.speed;
-      }
-      return Math.random() - 0.5; // Random tiebreaker
-    });
-
-    // Each piece attacks in speed order
-    for (const attacker of alivePieces) {
-      // Skip if this attacker died earlier in this turn
-      const attackerBattlePieces = attacker.team === 'player' 
-        ? battleState.playerPieces 
-        : battleState.opponentPieces;
-      
-      const currentAttacker = attackerBattlePieces.find(p => p.id === attacker.id);
-      if (!currentAttacker || currentAttacker.isDead) {
-        continue; // This attacker died earlier in this turn, skip
-      }
-      
-      // Get current alive enemies with team information
-      const enemies: BattlePieceWithTeam[] = attacker.team === 'player' 
-        ? battleState.opponentPieces.filter(p => !p.isDead).map(p => ({ ...p, team: 'opponent' as const }))
-        : battleState.playerPieces.filter(p => !p.isDead).map(p => ({ ...p, team: 'player' as const }));
-
-      if (enemies.length === 0) {
-        break; // No enemies left, battle is over
-      }
-
-      // Select target (random for now, could be strategic later)
-      const target = enemies[Math.floor(Math.random() * enemies.length)];
-
-      // Calculate detailed damage with proper base/bonus breakdown
-      const originalPiece = attacker.team === 'player' 
-        ? gameState.playerTank.pieces.find(p => p.id === attacker.id)
-        : gameState.opponentTank.pieces.find(p => p.id === attacker.id);
-      
-      const baseDamage = originalPiece?.stats.attack || attacker.stats.attack;
-      const attackBonus = attacker.stats.attack - baseDamage; // Calculate bonus from adjacency/schooling
-      const waterQuality = attacker.team === 'player' ? gameState.playerTank.waterQuality : gameState.opponentTank.waterQuality;
-      
-      // Water quality damage modifiers
-      let waterMultiplier = 1.0; // Default no bonus/penalty
-      if (waterQuality >= 8) {
-        waterMultiplier = 1.3; // +30% damage for excellent water (8-10)
-      } else if (waterQuality <= 3) {
-        waterMultiplier = 0.7; // -30% damage for poor water (1-3)
-      }
-      
-      const baseAttackDamage = attacker.stats.attack;
-      const waterModifiedDamage = Math.floor(baseAttackDamage * waterMultiplier);
-      const waterBonus = waterModifiedDamage - baseAttackDamage; // Show the actual bonus/penalty
-      const finalDamage = waterModifiedDamage;
-
-      // Find the actual battleState piece to update (not the local copy)
-      const battleStatePieces = target.team === 'player' 
-        ? battleState.playerPieces 
-        : battleState.opponentPieces;
-      
-      const battlePiece = battleStatePieces.find(p => p.id === target.id);
-      if (!battlePiece) {
-        console.error(`Could not find battle piece with id ${target.id}`);
-        continue;
-      }
-
-      // Apply damage to the actual battleState piece
-      const damageDealt = Math.min(finalDamage, battlePiece.currentHealth);
-      battlePiece.currentHealth = Math.max(0, battlePiece.currentHealth - finalDamage);
-      
-      // Check if target died
-      const targetDied = battlePiece.currentHealth <= 0;
-      if (targetDied) {
-        battlePiece.isDead = true;
-        
-        // Also mark the original tank piece as dead for visual display
-        const originalTankPieces = target.team === 'player' 
-          ? gameState.playerTank.pieces 
-          : gameState.opponentTank.pieces;
-        
-        const originalPiece = originalTankPieces.find(p => p.id === target.id);
-        if (originalPiece) {
-          (originalPiece as any).isDead = true;
-        }
-      }
-
-      // UPDATE: Recalculate tank health immediately after each attack
-      const currentPlayerHealth = battleState.playerPieces
-        .filter(p => !p.isDead)
-        .reduce((sum, p) => sum + p.currentHealth, 0);
-      
-      const currentOpponentHealth = battleState.opponentPieces
-        .filter(p => !p.isDead)
-        .reduce((sum, p) => sum + p.currentHealth, 0);
-
-      // Update battleState health values immediately
-      battleState.playerHealth = currentPlayerHealth;
-      battleState.opponentHealth = currentOpponentHealth;
-
-      // Create detailed attack event with health states
-      const attackEvent: BattleEvent = {
-        id: uuidv4(),
-        type: 'attack',
-        source: attacker.team === 'player' ? 'player-piece' : 'opponent-piece',
-        sourceName: attacker.name,
-        target: attacker.team === 'player' ? 'opponent-piece' : 'player-piece',
-        targetName: target.name,
-        value: damageDealt,
-        round: battleState.currentRound,
-        turn: battleState.currentTurn,
-        timestamp: Date.now(),
-        description: `${attacker.team === 'player' ? '🟢' : '🔴'} ${attacker.name} (Speed ${attacker.stats.speed}) attacks ${target.team === 'player' ? '🟢' : '🔴'} ${target.name}! ${baseDamage} base attack${attackBonus > 0 ? ` + ${attackBonus} bonuses` : ''}${waterBonus !== 0 ? (waterBonus > 0 ? ` + ${waterBonus} water quality` : ` - ${Math.abs(waterBonus)} water quality`) : ''} = ${finalDamage} damage → ${target.name} ${targetDied ? 'is KO\'d!' : `has ${battlePiece.currentHealth}/${battlePiece.stats.maxHealth} HP left`}`,
-        // Include real-time health states for frontend updates (using immediately calculated values)
-        healthStates: {
-          playerHealth: currentPlayerHealth,
-          opponentHealth: currentOpponentHealth,
-          targetPieceId: target.id,
-          targetCurrentHealth: battlePiece.currentHealth,
-          targetMaxHealth: battlePiece.stats.maxHealth,
-          targetDied: targetDied
-        }
-      };
-      
-      battleState.events.push(attackEvent);
-      turnEvents.push(attackEvent);
-
-      // Add death event if target died
-      if (targetDied) {
-        const deathEvent: BattleEvent = {
-          id: uuidv4(),
-          type: 'death',
-          source: 'system',
-          sourceName: target.name,
-          target: attacker.team === 'player' ? 'opponent-team' : 'player-team',
-          targetName: attacker.team === 'player' ? 'Opponent' : 'You',
-          value: 0,
-          round: battleState.currentRound,
-          turn: battleState.currentTurn,
-          timestamp: Date.now(),
-          description: `💀 ${target.team === 'player' ? '🟢' : '🔴'} ${target.name} has been defeated!`,
-        };
-        
-        battleState.events.push(deathEvent);
-        turnEvents.push(deathEvent);
-      }
-    }
-
-    // Update tank health based on remaining pieces
-    battleState.playerHealth = battleState.playerPieces
-      .filter(p => !p.isDead)
-      .reduce((sum, p) => sum + p.currentHealth, 0);
-    
-    battleState.opponentHealth = battleState.opponentPieces
-      .filter(p => !p.isDead)
-      .reduce((sum, p) => sum + p.currentHealth, 0);
-
-    // Check for winner
-    if (battleState.playerHealth <= 0) {
-      battleState.winner = 'opponent';
-      battleState.active = false;
-    } else if (battleState.opponentHealth <= 0) {
-      battleState.winner = 'player';
-      battleState.active = false;
-    } else if (battleState.currentTurn >= 20) {
-      battleState.winner = 'draw';
-      battleState.active = false;
-    }
-
-    battleState.currentTurn++;
+    const turnEvents = this.battleService.processBattleTurn(
+      battleState,
+      gameState.playerTank.waterQuality,
+      gameState.opponentTank.waterQuality,
+      gameState
+    );
     this.updateGameState(socketId, gameState);
 
     return { gameState, turnEvents };
@@ -1037,68 +777,6 @@ export class GameService {
     return pieces[Math.floor(Math.random() * pieces.length)] || null;
   }
 
-  private getOpponentPieceForRound(round: number, maxCost: number, currentWaterQuality: number, lossStreak: number): GamePiece | null {
-    const pieces = [...PIECE_LIBRARY].filter(piece => piece.cost <= maxCost);
-    
-    if (pieces.length === 0) return null;
-    
-    // Water quality considerations - prioritize based on current state
-    const isInToxicWater = currentWaterQuality <= 3; // Poison damage range
-    const isInGoodWater = currentWaterQuality >= 8; // Damage bonus range
-    const needsWaterQualityHelp = isInToxicWater || (lossStreak >= 2 && currentWaterQuality < 7);
-    
-    // If in toxic water or losing and need help, prioritize water quality improvers
-    if (needsWaterQualityHelp) {
-      const waterQualityPieces = pieces.filter(piece => 
-        piece.type === 'plant' || (piece.type === 'equipment' && piece.tags.includes('filter'))
-      );
-      if (waterQualityPieces.length > 0) {
-        // 80% chance to buy water quality pieces when water quality is bad
-        if (Math.random() < 0.8) {
-          console.log(`🤖 💧 Water quality ${currentWaterQuality} is bad, prioritizing plants/filters`);
-          return waterQualityPieces[Math.floor(Math.random() * waterQualityPieces.length)];
-        }
-      }
-    }
-    
-    // If in good water, prioritize fish to maximize damage bonus
-    if (isInGoodWater) {
-      const fish = pieces.filter(piece => piece.type === 'fish');
-      if (fish.length > 0 && Math.random() < 0.6) {
-        console.log(`🤖 💧 Water quality ${currentWaterQuality} is good, prioritizing fish`);
-        return fish[Math.floor(Math.random() * fish.length)];
-      }
-    }
-    
-    // Normal piece selection logic with cost-based preferences
-    // Early rounds (1-3): Random selection
-    if (round <= 3) {
-      return pieces[Math.floor(Math.random() * pieces.length)];
-    }
-    
-    // Mid rounds (4-7): Prefer medium-high cost pieces
-    if (round <= 7) {
-      const goodPieces = pieces.filter(piece => piece.cost >= 3);
-      if (goodPieces.length > 0) {
-        // 70% chance for higher cost pieces, 30% chance for any piece
-        return Math.random() < 0.7 
-          ? goodPieces[Math.floor(Math.random() * goodPieces.length)]
-          : pieces[Math.floor(Math.random() * pieces.length)];
-      }
-    }
-    
-    // Late rounds (8+): Strongly prefer high cost pieces
-    const expensivePieces = pieces.filter(piece => piece.cost >= 4);
-    if (expensivePieces.length > 0) {
-      // 85% chance for expensive pieces, 15% chance for any piece
-      return Math.random() < 0.85 
-        ? expensivePieces[Math.floor(Math.random() * expensivePieces.length)]
-        : pieces[Math.floor(Math.random() * pieces.length)];
-    }
-    
-    // Fallback to random if no expensive pieces available
-    return pieces[Math.floor(Math.random() * pieces.length)];
-  }
 
   private isValidPosition(tank: Tank, piece: GamePiece, position: Position): boolean {
     for (const offset of piece.shape) {
@@ -1333,18 +1011,6 @@ export class GameService {
     });
   }
 
-  private simulateBattle(playerTank: Tank, opponentTank: Tank): any {
-    const playerPower = playerTank.pieces.reduce((sum, p) => sum + p.stats.attack + p.stats.health, 0);
-    const opponentPower = opponentTank.pieces.reduce((sum, p) => sum + p.stats.attack + p.stats.health, 0);
-    
-    const winner = playerPower > opponentPower ? 'player' : 
-                   opponentPower > playerPower ? 'opponent' : 'draw';
-    
-    return {
-      winner,
-      events: [],
-    };
-  }
 
   private calculatePieceStats(piece: GamePiece, allPieces: GamePiece[]): { attack: number; health: number; speed: number } {
     if (!piece.position) {
@@ -1401,221 +1067,8 @@ export class GameService {
     };
   }
 
-  private updateOpponentTank(gameState: GameState): { remainingGold: number } {
-    const round = gameState.round;
-    let opponentGold = gameState.opponentGold;
-    const opponentTank = gameState.opponentTank;
-    const lossStreak = gameState.opponentLossStreak;
-    const winStreak = gameState.opponentWinStreak;
-    
-    console.log(`🤖 Updating opponent tank for round ${round} with ${opponentGold} gold (L${lossStreak} W${winStreak})`);
-    console.log(`🤖 Current opponent pieces: ${opponentTank.pieces.length}`);
-    
-    // Smart gold spending decisions
-    let spendingBudget = this.calculateOpponentSpendingBudget(opponentGold, round, lossStreak, winStreak);
-    console.log(`🤖 Spending budget: ${spendingBudget}g out of ${opponentGold}g available`);
-    
-    // Crisis mode: if losing badly with lots of gold, spend aggressively
-    const isInCrisis = lossStreak >= 3 && spendingBudget > 20;
-    const isLateGameDesperate = round >= 10 && lossStreak >= 2 && spendingBudget > 15;
-    
-    console.log(`🤖 Crisis mode: ${isInCrisis}, Late game desperate: ${isLateGameDesperate}`);
-    
-    let piecesBought = 0;
-    let consecutiveFailures = 0;
-    const maxConsecutiveFailures = 25; // More attempts when desperate
-    
-    // Spend until budget exhausted or can't find valid pieces/positions
-    while (spendingBudget > 0 && consecutiveFailures < maxConsecutiveFailures) {
-      const piece = typeof this.getOpponentPieceForRound === 'function' 
-        ? this.getOpponentPieceForRound(round, spendingBudget, opponentTank.waterQuality, lossStreak)
-        : this.getRandomPiece();
-      
-      if (!piece || piece.cost > spendingBudget) {
-        consecutiveFailures++;
-        continue;
-      }
-      
-      // Find optimal position for the new piece
-      let position: Position | null;
-      if (piece.type === 'consumable') {
-        position = this.findOptimalConsumablePosition(opponentTank, piece);
-      } else {
-        position = this.findValidPositionForOpponent(opponentTank, piece);
-      }
-      
-      if (position) {
-        const newPiece = { 
-          ...piece, 
-          id: uuidv4(),
-          position
-        };
-        
-        // Place piece on grid
-        this.placePieceOnGrid(opponentTank, newPiece);
-        
-        // Add to pieces array
-        opponentTank.pieces.push(newPiece);
-        opponentGold -= piece.cost;
-        spendingBudget -= piece.cost;
-        piecesBought++;
-        consecutiveFailures = 0;
-        
-        console.log(`🤖 Bought ${piece.name} for ${piece.cost}g at (${position.x},${position.y})`);
-      } else if (isInCrisis || isLateGameDesperate) {
-        // Try to replace a weaker piece if we're desperate and grid is full
-        const replacedPiece = this.tryReplaceWeakerPiece(opponentTank, piece, spendingBudget);
-        if (replacedPiece) {
-          opponentGold -= (piece.cost - replacedPiece.sellValue);
-          spendingBudget -= (piece.cost - replacedPiece.sellValue);
-          piecesBought++;
-          consecutiveFailures = 0;
-          
-          console.log(`🤖 Replaced ${replacedPiece.name} with ${piece.name} for net ${piece.cost - replacedPiece.sellValue}g`);
-        } else {
-          consecutiveFailures++;
-        }
-      } else {
-        // Normal mode: no valid position found, increment failures
-        consecutiveFailures++;
-        if (consecutiveFailures >= 5) {
-          console.log(`🤖 No valid positions found after ${consecutiveFailures} attempts, stopping purchases`);
-          break;
-        }
-      }
-    }
-    
-    console.log(`🤖 Opponent tank updated: ${opponentTank.pieces.length} total pieces, ${opponentGold} gold remaining`);
-    
-    // Recalculate water quality after updating opponent tank
-    gameState.opponentTank.waterQuality = this.calculateWaterQuality(gameState.opponentTank);
-    
-    return { remainingGold: opponentGold };
-  }
 
-  private calculateOpponentSpendingBudget(
-    currentGold: number, 
-    round: number, 
-    lossStreak: number, 
-    winStreak: number
-  ): number {
-    // Game phase definitions
-    const isEarlyGame = round <= 5;
-    const isMidGame = round > 5 && round <= 10;
-    const isLateGame = round > 10;
-    
-    // Interest breakpoints (10g, 20g, 30g, 40g, 50g)
-    const nextInterestBreakpoint = Math.ceil(currentGold / 10) * 10;
-    const goldToNextBreakpoint = nextInterestBreakpoint - currentGold;
-    
-    let spendingBudget = currentGold;
-    
-    // Early game: Aggressive spending, must build board strength first
-    if (isEarlyGame) {
-      if (round <= 3) {
-        // Rounds 1-3: Spend almost everything to build board
-        spendingBudget = Math.max(0, currentGold - 1); 
-      } else {
-        // Rounds 4-5: Start considering interest if doing well
-        if (lossStreak >= 2) {
-          spendingBudget = currentGold; // Spend everything when losing
-        } else if (currentGold >= 20 && winStreak >= 2) {
-          spendingBudget = currentGold - 10; // Eco only when winning and rich
-        } else {
-          spendingBudget = Math.max(0, currentGold - 2); // Keep minimal buffer
-        }
-      }
-    }
-    
-    // Mid game: More aggressive, but still respect interest
-    else if (isMidGame) {
-      if (lossStreak >= 3) {
-        spendingBudget = currentGold; // All-in when losing badly
-      } else if (winStreak >= 3) {
-        spendingBudget = Math.max(0, currentGold - 20); // Eco when winning
-      } else {
-        spendingBudget = Math.max(0, currentGold - 10); // Standard play
-      }
-    }
-    
-    // Late game: Spend for power, interest less important
-    else if (isLateGame) {
-      if (lossStreak >= 2) {
-        spendingBudget = currentGold; // Must spend to survive
-      } else {
-        spendingBudget = Math.max(0, currentGold - 5); // Keep small buffer
-      }
-    }
-    
-    return Math.min(spendingBudget, currentGold);
-  }
 
-  private tryReplaceWeakerPiece(
-    opponentTank: Tank, 
-    newPiece: GamePiece, 
-    availableBudget: number
-  ): { name: string; sellValue: number } | null {
-    // Calculate power rating for pieces to find weakest
-    const getPiecePower = (piece: GamePiece) => {
-      return piece.stats.attack + piece.stats.health + (piece.stats.speed * 0.5);
-    };
-    
-    const newPiecePower = getPiecePower(newPiece);
-    const sellValue = Math.floor(newPiece.cost * 0.75); // 75% sell value
-    const netCost = newPiece.cost - sellValue;
-    
-    // Don't replace if we can't afford the net cost
-    if (netCost > availableBudget) {
-      return null;
-    }
-    
-    // Find pieces that are weaker than the new piece and worth replacing
-    const replaceablePieces = opponentTank.pieces
-      .map(piece => ({
-        piece,
-        power: getPiecePower(piece),
-        sellValue: Math.floor(piece.cost * 0.75)
-      }))
-      .filter(p => p.power < newPiecePower * 0.8) // Only replace significantly weaker pieces
-      .sort((a, b) => a.power - b.power); // Weakest first
-    
-    if (replaceablePieces.length === 0) {
-      return null;
-    }
-    
-    const toReplace = replaceablePieces[0];
-    
-    // Remove the old piece from tank and grid
-    const pieceIndex = opponentTank.pieces.findIndex(p => p.id === toReplace.piece.id);
-    if (pieceIndex !== -1) {
-      opponentTank.pieces.splice(pieceIndex, 1);
-      this.removePieceFromGrid(opponentTank, toReplace.piece);
-      
-      // Try to place the new piece in the freed space or anywhere else
-      const position = this.findValidPositionForOpponent(opponentTank, newPiece);
-      if (position) {
-        const placedPiece = { 
-          ...newPiece, 
-          id: uuidv4(),
-          position
-        };
-        
-        this.placePieceOnGrid(opponentTank, placedPiece);
-        opponentTank.pieces.push(placedPiece);
-        
-        return {
-          name: toReplace.piece.name,
-          sellValue: toReplace.sellValue
-        };
-      } else {
-        // Couldn't place new piece, put old one back
-        this.placePieceOnGrid(opponentTank, toReplace.piece);
-        opponentTank.pieces.push(toReplace.piece);
-      }
-    }
-    
-    return null;
-  }
 
   private findOptimalConsumablePosition(tank: Tank, consumable: GamePiece): Position | null {
     let bestPosition: Position | null = null;
@@ -1703,100 +1156,6 @@ export class GameService {
     return fishCount;
   }
 
-  private generateOpponentTankWithGold(startingGold = 10, round = 1): { tank: Tank; remainingGold: number } {
-    console.log(`🤖 Generating opponent tank with ${startingGold} gold for round ${round}`);
-    
-    // Generate opponent tank that scales with round progression
-    const opponentPieces: GamePiece[] = [];
-    const grid: (string | null)[][] = Array(6).fill(null).map(() => Array(8).fill(null));
-    
-    // Use the opponent's actual gold amount
-    let opponentGold = startingGold;
-    
-    // Scale max pieces with round progression
-    // Round 1-3: 3-5 pieces, Round 4-7: 4-7 pieces, Round 8+: 5-8 pieces
-    const baseMaxPieces = Math.min(8, Math.max(3, 2 + Math.floor(round / 2)));
-    const maxPieces = Math.min(baseMaxPieces, Math.floor(startingGold / 3)); // Ensure we can afford pieces
-    
-    console.log(`🤖 Round ${round}: Target ${maxPieces} pieces with ${startingGold} gold`);
-    
-    let pieceCount = 0;
-    
-    // Generate pieces within budget with safety limits
-    let consecutiveFailures = 0;
-    const maxConsecutiveFailures = 10;
-    
-    while (opponentGold > 0 && pieceCount < maxPieces && consecutiveFailures < maxConsecutiveFailures) {
-      // In later rounds, prefer higher cost pieces (better units)
-      const piece = typeof this.getOpponentPieceForRound === 'function' 
-        ? this.getOpponentPieceForRound(round, opponentGold, 5, 0) // Default water quality 5, no loss streak
-        : this.getRandomPiece();
-      
-      if (!piece || piece.cost > opponentGold) {
-        consecutiveFailures++;
-        continue;
-      }
-      
-      // Find a valid position for the piece
-      let placed = false;
-      let attempts = 0;
-      while (!placed && attempts < 50) {
-        const position = { 
-          x: Math.floor(Math.random() * 8), 
-          y: Math.floor(Math.random() * 6) 
-        };
-        
-        // Check if position is valid for this piece
-        if (this.isValidPositionForGrid(grid, piece, position)) {
-          const opponentPiece = { 
-            ...piece, 
-            id: uuidv4(),
-            position
-          };
-          
-          // Place piece on grid
-          for (const offset of piece.shape) {
-            const x = position.x + offset.x;
-            const y = position.y + offset.y;
-            if (x >= 0 && x < 8 && y >= 0 && y < 6) {
-              grid[y][x] = opponentPiece.id;
-            }
-          }
-          
-          opponentPieces.push(opponentPiece);
-          opponentGold -= piece.cost;
-          pieceCount++;
-          placed = true;
-          consecutiveFailures = 0; // Reset failure counter on success
-        }
-        attempts++;
-      }
-      
-      if (!placed) {
-        consecutiveFailures++;
-      }
-    }
-
-    console.log(`🤖 Opponent tank generated: ${pieceCount} pieces, ${opponentGold} gold remaining`);
-    
-    const startingQuality = Math.floor(Math.random() * 3) + 6; // 6-8 random start
-    const tank = {
-      id: 'opponent',
-      pieces: opponentPieces,
-      waterQuality: startingQuality,
-      baseWaterQuality: startingQuality, // Store original for calculations
-      temperature: 25,
-      grid,
-    };
-
-    // Calculate proper water quality based on placed pieces
-    tank.waterQuality = this.calculateWaterQuality(tank);
-    
-    return {
-      tank,
-      remainingGold: opponentGold
-    };
-  }
 
 
   private findValidPositionForOpponent(tank: Tank, piece: GamePiece): Position | null {
@@ -1804,12 +1163,31 @@ export class GameService {
     for (let y = 0; y < 6; y++) {
       for (let x = 0; x < 8; x++) {
         const position = { x, y };
-        if (this.isValidPosition(tank, piece, position)) {
+        if (this.isValidPositionForNewPiece(tank, piece, position)) {
           return position;
         }
       }
     }
     return null; // No valid position found
+  }
+
+  private isValidPositionForNewPiece(tank: Tank, piece: GamePiece, position: Position): boolean {
+    // For new pieces, simply check if grid cells are empty
+    for (const offset of piece.shape) {
+      const x = position.x + offset.x;
+      const y = position.y + offset.y;
+      
+      if (x < 0 || x >= 8 || y < 0 || y >= 6) {
+        return false;
+      }
+      
+      // For new pieces, any occupied cell means invalid position
+      if (tank.grid[y][x] !== null) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   private isValidPositionForGrid(grid: (string | null)[][], piece: GamePiece, position: Position): boolean {
@@ -1829,49 +1207,7 @@ export class GameService {
     return true;
   }
 
-  private initializeBattleState(gameState: GameState): BattleState {
-    const playerPieces = this.convertToBattlePieces(gameState.playerTank.pieces);
-    const opponentPieces = this.convertToBattlePieces(gameState.opponentTank.pieces);
 
-    const playerMaxHealth = playerPieces.reduce((sum, p) => sum + p.stats.maxHealth, 0);
-    const opponentMaxHealth = opponentPieces.reduce((sum, p) => sum + p.stats.maxHealth, 0);
-
-    return {
-      active: true,
-      currentRound: 1,
-      currentTurn: 1,
-      playerHealth: playerMaxHealth,
-      opponentHealth: opponentMaxHealth,
-      playerMaxHealth,
-      opponentMaxHealth,
-      winner: null,
-      events: [],
-      playerPieces,
-      opponentPieces,
-      isGameComplete: gameState.round >= MAX_ROUNDS,
-    };
-  }
-
-  private convertToBattlePieces(pieces: GamePiece[]): BattlePiece[] {
-    const placedPieces = pieces.filter(p => p.position);
-    
-    return placedPieces.map(piece => {
-      // Calculate buffed stats for battle (same logic as calculatePieceStats)
-      const buffedStats = this.calculatePieceStats(piece, placedPieces);
-      
-      return {
-        ...piece,
-        stats: {
-          ...buffedStats,
-          maxHealth: buffedStats.health // Store calculated health as maxHealth
-        },
-        currentHealth: buffedStats.health,
-        isDead: false,
-        statusEffects: [],
-        nextActionTime: 0,
-      };
-    });
-  }
 
   private async runBattleSimulation(socketId: string): Promise<void> {
     const gameState = await this.getSession(socketId);
