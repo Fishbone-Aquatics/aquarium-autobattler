@@ -18,9 +18,13 @@ This is an Nx monorepo with a modular architecture designed for scalability:
 ```
 aquarium-autobattler-nx/
 ├── frontend/                # Next.js React application
-├── game-engine/            # NestJS backend with modular structure
+├── game-engine/            # NestJS backend with service-oriented architecture
+│   ├── src/game/           # Game orchestration and WebSocket endpoints
+│   ├── src/tank/           # Tank operations, water quality, piece placement
+│   ├── src/battle/         # Combat mechanics and battle simulation
+│   ├── src/economy/        # Shop generation, gold rewards, interest
+│   ├── src/ai/             # Opponent behavior and smart AI logic
 │   ├── src/player/         # Player session management
-│   ├── src/game/           # Game logic and mechanics
 │   ├── src/debug/          # Debug and admin tools
 │   └── src/app/            # Main application module
 ├── libs/shared-types/      # Shared TypeScript interfaces
@@ -131,9 +135,10 @@ npx nx lint game-engine    # Lint backend code
 - **Socket.IO Client** for real-time communication
 
 #### Game Engine (`apps/game-engine/`)
-- **NestJS** framework
+- **NestJS** framework with service-oriented architecture
+- **Modular Services**: Tank, Battle, Economy, AI, Player, Game orchestration
 - **WebSocket Gateway** for real-time events
-- **In-memory game state** (Redis integration planned)
+- **In-memory game state** with session persistence
 
 #### Shared Types (`libs/shared-types/`)
 - Common TypeScript interfaces

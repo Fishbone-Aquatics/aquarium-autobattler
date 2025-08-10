@@ -237,10 +237,28 @@
 ## 📝 Development Notes
 
 ### Recent Completions ✅
-- **Loss/Win Streak Economy Overhaul** - Removed confusing double bonuses (win+streak), simplified to base 5g + streak-only bonuses, proper transaction logging, double-loss scenario handling
-- **Opponent AI Intelligence Overhaul** - Smart spending budgets, crisis mode, water quality prioritization (plants/filters vs fish), consumable optimization, piece replacement logic
-- **Battle Display Enhancements** - Current HP/attack values during battles, dead piece detection (0 HP → skull + KO), real-time stat updates
-- **Code Cleanup** - Removed unused AI generation methods, streamlined water quality logic
+
+#### Major Architecture Refactoring (2025-08-10) 🏗️
+- **Complete GameService Refactoring** - Extracted monolithic ~2000 line service into clean architecture:
+  - **TankService** - Tank operations, piece placement, water quality, adjacency bonuses (~400 lines)
+  - **BattleService** - Combat mechanics, battle simulation, turn processing (~300 lines)
+  - **EconomyService** - Shop generation, gold rewards, interest calculation (~250 lines) 
+  - **AIService** - Opponent behavior, tank management, smart AI logic (~200 lines)
+  - **PlayerService** - Session management, player state persistence (existing)
+  - **Final GameService** - Clean orchestration and game flow control (710 lines, 65% reduction)
+- **Service Architecture Benefits**:
+  - ✅ Proper NestJS dependency injection
+  - ✅ Clear separation of concerns
+  - ✅ Maintainable and testable code
+  - ✅ Type-safe service boundaries
+  - ✅ No functionality lost during extraction
+- **Removed Dead Code** - Eliminated unused `runBattleSimulation()` method (~106 lines)
+
+#### Previous Completions ✅
+- Loss/Win Streak Economy Overhaul - Removed confusing double bonuses (win+streak), simplified to base 5g + streak-only bonuses, proper transaction logging, double-loss scenario handling
+- Opponent AI Intelligence Overhaul - Smart spending budgets, crisis mode, water quality prioritization (plants/filters vs fish), consumable optimization, piece replacement logic
+- Battle Display Enhancements - Current HP/attack values during battles, dead piece detection (0 HP → skull + KO), real-time stat updates
+- Code Cleanup - Removed unused AI generation methods, streamlined water quality logic
 - Game End System - Round 15 final battle UI and automatic campaign reset
 - Sell Functionality - 75% value sell buttons on placed pieces
 - Real-time Battle Health Updates - Health bars update after each individual attack
