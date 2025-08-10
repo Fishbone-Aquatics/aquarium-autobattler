@@ -8,13 +8,6 @@
 
 ## 🟡 High Impact Features
 
-### 1. Loss/Win Streak System Overhaul
-- **Issue**: Loss bonus system needs rework, no win streak rewards
-- **Impact**: Unbalanced progression, missing strategic comeback mechanics
-- **Solution**: Redesign loss streak bonuses, implement win streak rewards system
-- **Files**: `game.service.ts` - economy and progression logic
-- **Status**: ✅ **Complete** - Simplified economy system with base 5g + streak bonuses only (L1-L6: 2/4/6/8/10/12g, W2-W5+: 1/2/3/4g)
-
 ### 2. Equipment System Expansion
 - **Issue**: Only Basic Filter exists, equipment system needs more variety
 - **Impact**: Limited strategic options beyond basic filter
