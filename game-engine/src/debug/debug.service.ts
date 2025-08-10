@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PlayerService } from '../player/player.service';
 import { GameService } from '../game/game.service';
+import { EconomyService } from '../economy/economy.service';
 
 @Injectable()
 export class DebugService {
   constructor(
     private playerService: PlayerService,
-    private gameService: GameService
+    private gameService: GameService,
+    private economyService: EconomyService
   ) {}
 
   /**
@@ -117,7 +119,7 @@ export class DebugService {
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
-      shop: this.gameService.generateShop(),
+      shop: this.economyService.generateShop(),
       battleEvents: [],
       selectedPiece: null,
       opponentGold: 10,

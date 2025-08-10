@@ -30,7 +30,9 @@
       "Bash(python:*)",
       "Bash(timeout 15s npm run dev)",
       "Bash(rg:*)",
-      "Bash(npx nx test:*)"
+      "Bash(npx nx test:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

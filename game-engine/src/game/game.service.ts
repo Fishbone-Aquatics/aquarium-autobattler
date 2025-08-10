@@ -5,10 +5,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { PlayerService } from '../player/player.service';
 import { AIService } from '../ai/ai.service';
 import { BattleService } from '../battle/battle.service';
+import { EconomyService } from '../economy/economy.service';
 
 // Game constants
 const MAX_ROUNDS = 15;
-const SELL_PERCENTAGE = 0.75;
 
 // Type for battle pieces with team information
 interface BattlePieceWithTeam extends BattlePiece {
@@ -20,7 +20,8 @@ export class GameService {
   constructor(
     private playerService: PlayerService,
     private aiService: AIService,
-    private battleService: BattleService
+    private battleService: BattleService,
+    private economyService: EconomyService
   ) {}
 
   async createSession(socketId: string, playerId: string): Promise<GameState> {
@@ -58,7 +59,7 @@ export class GameService {
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
-      shop: this.generateShop(),
+      shop: this.economyService.generateShop(),
       battleEvents: [],
       selectedPiece: null,
       opponentGold: 10,
@@ -157,7 +158,7 @@ export class GameService {
     }
 
     const piece = gameState.playerTank.pieces[pieceIndex];
-    const sellPrice = Math.floor(piece.cost * SELL_PERCENTAGE);
+    const sellPrice = this.economyService.calculateSellValue(piece.cost);
     
     // Add gold
     gameState.gold += sellPrice;
@@ -193,10 +194,7 @@ export class GameService {
     }
 
     // Calculate scaled reroll cost: base 2g, +1g per reroll after 5th
-    const baseRerollCost = 2;
-    const freeRerolls = 5;
-    const extraCostPerReroll = 1;
-    const rerollCost = baseRerollCost + Math.max(0, (gameState.rerollsThisRound - freeRerolls) * extraCostPerReroll);
+    const rerollCost = this.economyService.calculateRerollCost(gameState.rerollsThisRound);
     
     if (gameState.gold < rerollCost) {
       throw new BadRequestException(`Insufficient gold for reroll (costs ${rerollCost}g)`);
@@ -207,17 +205,15 @@ export class GameService {
     gameState.rerollsThisRound++;
 
     // Generate new shop (preserve locked slot)
-    gameState.shop = this.generateShop(gameState.shop, gameState.lockedShopIndex);
+    gameState.shop = this.economyService.generateShop(gameState.shop, gameState.lockedShopIndex);
 
     // Add gold transaction
-    gameState.goldHistory.push({
-      id: uuidv4(),
-      round: gameState.round,
-      type: 'reroll',
-      amount: -rerollCost,
-      description: `Shop reroll (${gameState.rerollsThisRound}${gameState.rerollsThisRound === 1 ? 'st' : gameState.rerollsThisRound === 2 ? 'nd' : gameState.rerollsThisRound === 3 ? 'rd' : 'th'} this round)`,
-      timestamp: Date.now(),
-    });
+    gameState.goldHistory.push(this.economyService.createGoldTransaction(
+      gameState.round,
+      'reroll',
+      -rerollCost,
+      this.economyService.formatRerollDescription(gameState.rerollsThisRound)
+    ));
 
     this.updateGameState(socketId, gameState);
     return gameState;
@@ -347,81 +343,55 @@ export class GameService {
                          gameState.battleState?.opponentHealth === 0;
     
     // Calculate player rewards - everyone gets base, only streaks provide bonuses
-    const playerBaseReward = 5;
+    const playerBaseReward = this.economyService.calculateGoldReward(battleResult.winner === 'player');
     // NO win/loss bonuses - only streaks matter
     
     // New loss streak bonuses: 2/4/6/8/10/12 gold
-    let playerLossStreakBonus = 0;
-    if (gameState.lossStreak === 1) playerLossStreakBonus = 2;
-    else if (gameState.lossStreak === 2) playerLossStreakBonus = 4;
-    else if (gameState.lossStreak === 3) playerLossStreakBonus = 6;
-    else if (gameState.lossStreak === 4) playerLossStreakBonus = 8;
-    else if (gameState.lossStreak === 5) playerLossStreakBonus = 10;
-    else if (gameState.lossStreak >= 6) playerLossStreakBonus = 12;
+    const playerLossStreakBonus = this.economyService.calculateLossStreakBonus(gameState.lossStreak);
     
     // New win streak bonuses: 1/2/3/4 gold
-    let playerWinStreakBonus = 0;
-    if (gameState.winStreak === 2) playerWinStreakBonus = 1;
-    else if (gameState.winStreak === 3) playerWinStreakBonus = 2;
-    else if (gameState.winStreak === 4) playerWinStreakBonus = 3;
-    else if (gameState.winStreak >= 5) playerWinStreakBonus = 4;
+    const playerWinStreakBonus = this.economyService.calculateWinStreakBonus(gameState.winStreak);
     
     // Add base battle reward (everyone gets this regardless of outcome)
     gameState.gold += playerBaseReward;
-    gameState.goldHistory.push({
-      id: uuidv4(),
-      round: gameState.round,
-      type: 'battle_reward',
-      amount: playerBaseReward,
-      description: `Battle ${battleResult.winner === 'player' ? 'won' : battleResult.winner === 'draw' ? (isDoubleLoss ? 'double loss (no attackers)' : 'tied') : 'lost'} (+5 base)`,
-      timestamp: Date.now(),
-    });
+    gameState.goldHistory.push(this.economyService.createGoldTransaction(
+      gameState.round,
+      'battle_reward',
+      playerBaseReward,
+      `Battle ${battleResult.winner === 'player' ? 'won' : battleResult.winner === 'draw' ? (isDoubleLoss ? 'double loss (no attackers)' : 'tied') : 'lost'} (+5 base)`
+    ));
 
     // Add separate loss streak bonus if applicable  
     if (playerLossStreakBonus > 0) {
       gameState.gold += playerLossStreakBonus;
-      gameState.goldHistory.push({
-        id: uuidv4(),
-        round: gameState.round,
-        type: 'loss_streak_bonus',
-        amount: playerLossStreakBonus,
-        description: `Loss streak bonus (L${gameState.lossStreak}: +${playerLossStreakBonus}g)`,
-        timestamp: Date.now(),
-      });
+      gameState.goldHistory.push(this.economyService.createGoldTransaction(
+        gameState.round,
+        'loss_streak_bonus',
+        playerLossStreakBonus,
+        `Loss streak bonus (L${gameState.lossStreak}: +${playerLossStreakBonus}g)`
+      ));
     }
     
     // Add win streak bonus if applicable
     if (playerWinStreakBonus > 0) {
       gameState.gold += playerWinStreakBonus;
-      gameState.goldHistory.push({
-        id: uuidv4(),
-        round: gameState.round,
-        type: 'win_streak_bonus',
-        amount: playerWinStreakBonus,
-        description: `Win streak bonus (W${gameState.winStreak}: +${playerWinStreakBonus}g)`,
-        timestamp: Date.now(),
-      });
+      gameState.goldHistory.push(this.economyService.createGoldTransaction(
+        gameState.round,
+        'win_streak_bonus',
+        playerWinStreakBonus,
+        `Win streak bonus (W${gameState.winStreak}: +${playerWinStreakBonus}g)`
+      ));
     }
 
     // Calculate opponent rewards (same mechanics as player)
-    const opponentBaseReward = 5;
+    const opponentBaseReward = this.economyService.calculateGoldReward(battleResult.winner === 'opponent');
     // NO win/loss bonuses - only streaks matter
     
     // Opponent loss streak bonuses
-    let opponentLossStreakBonus = 0;
-    if (gameState.opponentLossStreak === 1) opponentLossStreakBonus = 2;
-    else if (gameState.opponentLossStreak === 2) opponentLossStreakBonus = 4;
-    else if (gameState.opponentLossStreak === 3) opponentLossStreakBonus = 6;
-    else if (gameState.opponentLossStreak === 4) opponentLossStreakBonus = 8;
-    else if (gameState.opponentLossStreak === 5) opponentLossStreakBonus = 10;
-    else if (gameState.opponentLossStreak >= 6) opponentLossStreakBonus = 12;
+    const opponentLossStreakBonus = this.economyService.calculateLossStreakBonus(gameState.opponentLossStreak);
     
     // Opponent win streak bonuses
-    let opponentWinStreakBonus = 0;
-    if (gameState.opponentWinStreak === 2) opponentWinStreakBonus = 1;
-    else if (gameState.opponentWinStreak === 3) opponentWinStreakBonus = 2;
-    else if (gameState.opponentWinStreak === 4) opponentWinStreakBonus = 3;
-    else if (gameState.opponentWinStreak >= 5) opponentWinStreakBonus = 4;
+    const opponentWinStreakBonus = this.economyService.calculateWinStreakBonus(gameState.opponentWinStreak);
     
     // Give opponent base reward
     gameState.opponentGold += opponentBaseReward;
@@ -435,21 +405,19 @@ export class GameService {
     }
 
     // Player Interest
-    const playerInterest = Math.min(Math.floor(gameState.gold / 10), 5);
+    const playerInterest = this.economyService.calculateInterest(gameState.gold);
     if (playerInterest > 0) {
       gameState.gold += playerInterest;
-      gameState.goldHistory.push({
-        id: uuidv4(),
-        round: gameState.round,
-        type: 'interest',
-        amount: playerInterest,
-        description: 'Interest earned',
-        timestamp: Date.now(),
-      });
+      gameState.goldHistory.push(this.economyService.createGoldTransaction(
+        gameState.round,
+        'interest',
+        playerInterest,
+        'Interest earned'
+      ));
     }
 
     // Opponent Interest (same calculation as player)
-    const opponentInterest = Math.min(Math.floor(gameState.opponentGold / 10), 5);
+    const opponentInterest = this.economyService.calculateInterest(gameState.opponentGold);
     if (opponentInterest > 0) {
       gameState.opponentGold += opponentInterest;
     }
@@ -464,7 +432,7 @@ export class GameService {
     gameState.rerollsThisRound = 0;
     
     // Generate new shop for when they return, preserving locked items
-    gameState.shop = this.generateShop(gameState.shop, gameState.lockedShopIndex);
+    gameState.shop = this.economyService.generateShop(gameState.shop, gameState.lockedShopIndex);
     
     // Keep battle state so user can see battle results
     // battleState will be cleared when user clicks continue
@@ -519,7 +487,7 @@ export class GameService {
     
     // Shop should already be generated from finalizeBattleRewards, but ensure it exists
     if (!gameState.shop || gameState.shop.length === 0) {
-      gameState.shop = this.generateShop(gameState.shop, gameState.lockedShopIndex);
+      gameState.shop = this.economyService.generateShop(gameState.shop, gameState.lockedShopIndex);
     }
     
     this.updateGameState(socketId, gameState);
@@ -560,7 +528,7 @@ export class GameService {
         temperature: 25,
         grid: Array(6).fill(null).map(() => Array(8).fill(null)),
       },
-      shop: this.generateShop(),
+      shop: this.economyService.generateShop(),
       battleEvents: [],
       selectedPiece: null,
       opponentGold: 10,
@@ -754,28 +722,6 @@ export class GameService {
     this.playerService.updateSession(playerId, gameState);
   }
 
-  public generateShop(existingShop?: (GamePiece | null)[], lockedIndex?: number | null): (GamePiece | null)[] {
-    const shopSize = 6;
-    const shop: (GamePiece | null)[] = [];
-    
-    for (let i = 0; i < shopSize; i++) {
-      // Preserve locked item if this is the locked index
-      if (lockedIndex !== null && lockedIndex === i && existingShop && existingShop[i]) {
-        shop.push(existingShop[i]);
-        console.log(`🔒 Preserving locked item at index ${i}: ${existingShop[i]?.name}`);
-      } else {
-        const piece = this.getRandomPiece();
-        shop.push(piece ? { ...piece, id: uuidv4() } : null);
-      }
-    }
-    
-    return shop;
-  }
-
-  private getRandomPiece(): GamePiece | null {
-    const pieces = [...PIECE_LIBRARY];
-    return pieces[Math.floor(Math.random() * pieces.length)] || null;
-  }
 
 
   private isValidPosition(tank: Tank, piece: GamePiece, position: Position): boolean {
