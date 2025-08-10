@@ -57,12 +57,36 @@ npm run lint:fix               # Auto-fix linting issues
 
 ## Game Engine Architecture (NestJS)
 
-The backend is modularly structured with dedicated services:
+The backend follows a clean service-oriented architecture with dedicated services for different game domains:
 
-- **src/player/** - Session management, player state persistence 
-- **src/game/** - Core game logic, battle mechanics, WebSocket events
-- **src/debug/** - Debug endpoints, admin tools, API documentation
+### Core Services (Refactored 2025-08-10)
+- **src/game/game.service.ts** - Game orchestration, session management, WebSocket endpoints (710 lines)
+- **src/tank/tank.service.ts** - Tank operations, piece placement, water quality, adjacency bonuses (~400 lines)
+- **src/battle/battle.service.ts** - Combat mechanics, battle simulation, turn processing (~300 lines) 
+- **src/economy/economy.service.ts** - Shop generation, gold rewards, interest calculation (~250 lines)
+- **src/ai/ai.service.ts** - Opponent behavior, tank management, smart AI logic (~200 lines)
+- **src/player/player.service.ts** - Session persistence, player state management (existing)
+
+### Supporting Modules
+- **src/debug/** - Debug endpoints, admin tools, API documentation  
 - **src/app/data/pieces.ts** - Game piece definitions and stats
+
+### Service Dependencies
+```typescript
+GameService
+├── PlayerService (session management)
+├── TankService (grid operations, water quality) 
+├── BattleService (combat, turn processing)
+├── EconomyService (shop, gold, interest)
+└── AIService (opponent logic)
+```
+
+### Architecture Benefits
+- ✅ **Proper NestJS dependency injection** - Clean service boundaries
+- ✅ **Separation of concerns** - Each service handles one domain  
+- ✅ **Maintainable code** - 65% reduction in GameService size
+- ✅ **Type safety** - All services use shared-types interfaces
+- ✅ **Testable** - Services can be unit tested independently
 
 ### WebSocket Events
 Game state synchronization uses Socket.IO events defined in `libs/shared-types/src/lib/events.types.ts`.
@@ -91,25 +115,26 @@ Understanding the game helps when debugging or adding features:
 - **Real-time battles** with speed-based initiative order
 - **Session persistence** - game state survives page refreshes
 
-## Recent Major Features (2025-08-09)
+## Recent Major Features 
 
-### Water Quality System ✅
-- **Fish decrease quality (-1), plants increase (+1), equipment neutral**
-- **Combat bonuses**: 30% damage bonus for quality 8-10, 30% penalty for quality 1-3
-- **Poison damage**: Fish in poor water (1-3) take 1 poison damage per turn
-- **Visual indicators**: Water quality badges show combat bonuses in UI
-- **Random starting quality**: Games start with 6-8 instead of fixed 5
+### Architecture Refactoring (2025-08-10) 🏗️
+- **Complete GameService Refactoring** - Extracted monolithic ~2000 line service into clean architecture
+- **Service Extraction Process**:
+  - **Phase 1**: AIService extraction (~200 lines)
+  - **Phase 2**: BattleService extraction (~300 lines)
+  - **Phase 3**: Integration tests and safety validation
+  - **Phase 4**: EconomyService extraction (~250 lines)
+  - **Phase 5**: TankService extraction (~400 lines)
+  - **Final**: Dead code removal and cleanup
+- **Result**: Clean 710-line GameService focused on orchestration
+- **Benefits**: Maintainable, testable, type-safe service boundaries
 
-### Equipment System Fixes ✅
-- **Fixed critical adjacency bugs**: Removed double-application of filter bonuses
-- **Precise adjacency logic**: Only plants directly touching filters get boosted
-- **Multi-cell handling**: Pieces get one bonus per source regardless of contact points
-- **Current state**: Equipment affects water quality only, adjacency bonuses removed for simplicity
-
-### Mobile-First UI Improvements ✅
-- **Shop cards**: Restructured for mobile (shape top-right, horizontal stats, info icon)
-- **Battle prep screen**: Battle button first, collapsible sections, no-scroll design
-- **Battle log**: Expanded from 256px to 700px max height with gradient header
+### Game Features (2025-08-09) ✅
+- **Water Quality System** - Fish decrease quality (-1), plants increase (+1), combat bonuses/penalties
+- **Equipment System Fixes** - Precise adjacency logic, no double-application of bonuses
+- **Mobile-First UI** - Restructured cards, battle prep, expanded battle log
+- **AI Intelligence Overhaul** - Smart spending, crisis mode, consumable optimization
+- **Economy Balance** - Simplified streak bonuses, proper transaction logging
 
 ## Known Issues & Priorities
 
@@ -125,8 +150,38 @@ See TODO.md for current priorities.
 - **Unclosed tags**: Watch for dangling `</>` or mismatched conditional rendering
 - **Component nesting**: Ensure proper `{ condition && (<>...</>)}` structure
 
+### Service Architecture Patterns
+- **GameService**: Only handles orchestration, WebSocket endpoints, and complex business logic spanning multiple domains
+- **Service method calls**: Always use dependency injection (e.g., `this.tankService.calculateWaterQuality()`)
+- **Avoid duplication**: If logic exists in a service, don't reimplement in GameService
+- **Type safety**: All services use shared-types interfaces consistently
+- **Service boundaries**: Each service should handle one clear domain (tank, battle, economy, etc.)
+
+### Service Quick Reference
+```typescript
+// Tank operations
+this.tankService.updateTankPiece(tank, pieceId, position, action)
+this.tankService.calculateWaterQuality(tank)
+this.tankService.calculatePieceStats(piece, allPieces)
+this.tankService.processConsumables(tank)
+
+// Battle mechanics  
+this.battleService.initializeBattleState(gameState, statsCalculator)
+this.battleService.processBattleTurn(battleState, waterQuality)
+this.battleService.simulateBattle(playerTank, opponentTank)
+
+// Economy operations
+this.economyService.generateShop(existingShop?, lockedIndex?)
+this.economyService.calculateRerollCost(currentRerolls)
+this.economyService.calculateGoldReward(isWinner)
+
+// AI behavior
+this.aiService.updateOpponentTank(gameState, callbacks...)
+this.aiService.generateOpponentPieces(budget, currentPieces)
+```
+
 ### Adjacency Logic Debugging
-- **Multi-cell pieces**: Use `aretwoPiecesAdjacent()` helper for proper shape-aware adjacency
+- **Multi-cell pieces**: Use `TankService.areTwoPiecesAdjacent()` for proper shape-aware adjacency
 - **Bonus stacking**: Ensure each piece gets only one bonus per source
 - **Equipment effects**: Current system only affects water quality, not adjacency bonuses
 
