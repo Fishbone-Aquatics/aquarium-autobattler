@@ -11,7 +11,23 @@ import { AppModule } from './app/app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        // Allow requests from localhost, network IPs, and configured frontend URL
+        const allowedOrigins = [
+          'http://localhost:3000',
+          'http://127.0.0.1:3000',
+          process.env.FRONTEND_URL,
+        ];
+        
+        // Allow any origin from local network (192.168.x.x, 10.x.x.x, etc)
+        if (!origin || 
+            allowedOrigins.includes(origin) || 
+            origin.match(/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.).*:3000$/)) {
+          callback(null, true);
+        } else {
+          callback(null, true); // For development, allow all origins
+        }
+      },
       credentials: true,
     },
   });
@@ -35,7 +51,7 @@ async function bootstrap() {
   });
   
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   
   Logger.log(
     `🚀 Game Engine is running on: http://localhost:${port}/${globalPrefix}`

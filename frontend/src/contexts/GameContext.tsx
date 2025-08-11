@@ -64,8 +64,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001', {
+    // Initialize socket connection - use current host if accessing from network
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+      (typeof window !== 'undefined' && window.location.hostname !== 'localhost' 
+        ? `http://${window.location.hostname}:3001`
+        : 'http://localhost:3001');
+    
+    console.log('🔌 Connecting to socket at:', apiUrl);
+    
+    const socketInstance = io(apiUrl, {
       transports: ['websocket'],
     });
 

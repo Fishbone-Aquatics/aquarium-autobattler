@@ -17,6 +17,11 @@ export function Footer({ phase, waterQuality }: FooterProps) {
   // Get player ID from localStorage
   const playerId = typeof window !== 'undefined' ? localStorage.getItem('aquarium-player-id') : null;
   
+  // Get API URL based on current host
+  const apiUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost' 
+    ? `http://${window.location.hostname}:3001`
+    : 'http://localhost:3001';
+  
   return (
     <footer className="bg-white border-t border-gray-200 mt-12">
       <div className="container mx-auto px-4 py-4">
@@ -57,7 +62,7 @@ export function Footer({ phase, waterQuality }: FooterProps) {
             {playerId && (
               <div className="relative group">
                 <a
-                  href={`http://localhost:3001/api/debug/session/${playerId}`}
+                  href={`${apiUrl}/api/debug/session/${playerId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-200 transition-colors inline-block"
@@ -84,7 +89,7 @@ export function Footer({ phase, waterQuality }: FooterProps) {
                 onClick={async () => {
                   if (confirm('Reset your current game? This will start a new game but keep your player ID.')) {
                     try {
-                      const response = await fetch(`http://localhost:3001/api/debug/player/${playerId}`, {
+                      const response = await fetch(`${apiUrl}/api/debug/player/${playerId}`, {
                         method: 'POST',
                       });
                       if (response.ok) {
