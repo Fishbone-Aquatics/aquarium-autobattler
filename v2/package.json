@@ -1,0 +1,23 @@
+{
+  "name": "aquarium-autobattle-v2",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev -w @aquarium/server\" \"npm run dev -w @aquarium/web\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/engine --noEmit && tsc -p apps/server --noEmit && tsc -p apps/web --noEmit",
+    "build": "npm run build -w @aquarium/web",
+    "start": "npm run start -w @aquarium/server"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "typescript": "~5.8.2",
+    "vitest": "^3.0.0"
+  }
+}

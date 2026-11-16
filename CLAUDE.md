@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## v2 rewrite (active development)
+
+Active work happens in **`v2/`**, a standalone npm-workspaces project (not part of the Nx workspace). Everything else in this repo is the original v1, kept as reference only. See `v2/README.md` for rules and architecture.
+
+```bash
+cd v2
+npm install
+npm run dev        # server :3101 + web http://localhost:5173
+npm test           # engine rules tests (vitest)
+npm run typecheck
+```
+
+- `v2/packages/engine` - pure TS rules; `computeBoard()` in `stats.ts` is the single source of truth for every stat (UI, AI and battle all call it). Adjacency is edge-only.
+- `v2/apps/server` - authoritative Socket.IO server running the engine reducer (`applyAction`).
+- `v2/apps/web` - React + Vite client; pointer-event drag and drop in `Prep.tsx`.
+
+The sections below describe v1.
+
 ## Architecture Overview
 
 This is an **Nx monorepo** containing a full-stack aquarium auto-battler game:
