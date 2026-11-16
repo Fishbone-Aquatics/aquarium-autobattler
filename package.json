@@ -7,6 +7,7 @@
     "start:all": "npm run build:shared && concurrently --kill-others --prefix \"[{name}]\" --names \"backend,frontend\" \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "npx nx serve game-engine",
     "start:frontend": "npx nx dev frontend",
+    "start:frontend:prod": "npx nx serve frontend --prod",
     "build:shared": "npx nx build shared-types",
     "build:all": "npx nx build shared-types && npx nx build game-engine && npx nx build frontend",
     "dev": "npm run start:all",
