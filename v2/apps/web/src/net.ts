@@ -2,17 +2,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { applyAction, type Action, type GameState } from '@aquarium/engine';
 
+function uuid(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // Fallback for HTTP (non-secure) contexts where randomUUID is unavailable.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function playerId(): string {
   const KEY = 'aquarium-v2-player';
   try {
     let id = localStorage.getItem(KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = uuid();
       localStorage.setItem(KEY, id);
     }
     return id;
   } catch {
-    return crypto.randomUUID();
+    return uuid();
   }
 }
 
